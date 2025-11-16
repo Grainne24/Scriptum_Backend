@@ -25,7 +25,7 @@ def hash_password(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     # Safely checks the plain password against the stored hash
     return pwd_context.verify(plain_password, hashed_password)
-    return hashlib.sha256(password.encode()).hexdigest()
+    #return hashlib.sha256(password.encode()).hexdigest()
 
 #This is to create a new user
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
