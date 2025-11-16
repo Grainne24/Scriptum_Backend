@@ -7,11 +7,19 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
+class UserBase(BaseModel):
+    email: EmailStr
+    username: str = Field(..., min_length=3, max_length=100)
+
 #Schema for creating a user e.g. must be of valid email format
 class UserCreate(BaseModel):
     email: EmailStr
     username: str = Field(..., min_length=3, max_length=30)
     password: str = Field(..., min_length=8)
+
+class UserLogin(BaseModel):
+    email: str  # Can be email or username
+    password: str
 
 #Schema for returning data so what the API sends back
 class UserResponse(BaseModel):
