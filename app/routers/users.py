@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
-# from passlib.context import CryptContext
 import hashlib
+
 
 from app.database import get_db
 from app.models import User
@@ -29,6 +29,28 @@ def hash_password(password: str) -> str:
 #     # Safely checks the plain password against the stored hash
 #     return pwd_context.verify(plain_password, hashed_password)
 #     #return hashlib.sha256(password.encode()).hexdigest()
+
+@router.post("/login", response_model=UserResponse)
+def login_user(email: str, password: str, db: Session = Depends(get_db)):
+    """
+    Login endpoint - validates user credentials
+    """
+    # Hash the provided password
+    password_hash = hash_password(password)
+    
+    # Find user by email or username
+    user = db.query(User).filter(
+        ((User.email == email) | (User.username == email)) &
+        (User.password_hash == password_hash)
+    ).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email/username or password"
+        )
+    
+    return user
 
 #This is to create a new user
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
