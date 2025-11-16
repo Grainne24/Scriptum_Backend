@@ -9,3 +9,5 @@ email-validator==2.1.0
 httpx==0.25.2
 gunicorn==21.2.0
 faststylometry
+passlib
+bcrypt
