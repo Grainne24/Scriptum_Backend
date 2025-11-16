@@ -28,6 +28,47 @@ class UserResponse(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
 
+class BookBase(BaseModel):
+    title: str = Field(..., max_length=500)
+    author: str = Field(..., max_length=255)
+    publication_year: Optional[int] = None
+    isbn: Optional[str] = Field(None, max_length=13)
+
+class BookCreate(BookBase):
+    text_file_path: Optional[str] = None
+    text_source: Optional[str] = None
+
+class BookUpdate(BaseModel):
+    title: Optional[str] = None
+    author: Optional[str] = None
+    publication_year: Optional[int] = None
+    text_file_path: Optional[str] = None
+    analyzed: Optional[bool] = None
+
+class BookResponse(BookBase):
+    book_id: UUID
+    created_at: datetime
+    analyzed: bool
+    text_source: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+# Rating Schemas
+class RatingCreate(BaseModel):
+    book_id: UUID
+    rating: float = Field(..., ge=0.0, le=10.0)
+    review_text: Optional[str] = None
+
+class RatingResponse(BaseModel):
+    rating_id: UUID
+    user_id: UUID
+    book_id: UUID
+    rating: float
+    review_text: Optional[str]
+    rated_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
 # Error response
 class ErrorResponse(BaseModel):
     detail: str
