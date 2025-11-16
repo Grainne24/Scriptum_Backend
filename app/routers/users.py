@@ -7,11 +7,11 @@ from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
 import hashlib
-
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models import User
-from app.schemas import UserCreate, UserResponse
+from app.schemas import UserCreate, UserResponse, UserLogin
 
 #Creates a router for the related endpoints 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -20,6 +20,10 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
 
 # def hash_password(password: str) -> str:
 #     # Uses Bcrypt to create a secure, salted hash
@@ -31,16 +35,18 @@ def hash_password(password: str) -> str:
 #     #return hashlib.sha256(password.encode()).hexdigest()
 
 @router.post("/login", response_model=UserResponse)
-def login_user(email: str, password: str, db: Session = Depends(get_db)):
+@router.post("/login", response_model=UserResponse)
+def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
     """
     Login endpoint - validates user credentials
+    Email can be either email address or username
     """
     # Hash the provided password
-    password_hash = hash_password(password)
+    password_hash = hash_password(login_data.password)
     
     # Find user by email or username
     user = db.query(User).filter(
-        ((User.email == email) | (User.username == email)) &
+        ((User.email == login_data.email) | (User.username == login_data.email)) &
         (User.password_hash == password_hash)
     ).first()
     
@@ -49,6 +55,10 @@ def login_user(email: str, password: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email/username or password"
         )
+    
+    # Update last login time
+    user.last_login = datetime.now()
+    db.commit()
     
     return user
 
