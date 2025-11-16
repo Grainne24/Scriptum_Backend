@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
+from passlib.context import CryptContext
 import hashlib
 
 from app.database import get_db
@@ -15,8 +16,15 @@ from app.schemas import UserCreate, UserResponse
 #Creates a router for the related endpoints 
 router = APIRouter(prefix="/users", tags=["users"])
 
-#This is a simple password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 def hash_password(password: str) -> str:
+    # Uses Bcrypt to create a secure, salted hash
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    # Safely checks the plain password against the stored hash
+    return pwd_context.verify(plain_password, hashed_password)
     return hashlib.sha256(password.encode()).hexdigest()
 
 #This is to create a new user
