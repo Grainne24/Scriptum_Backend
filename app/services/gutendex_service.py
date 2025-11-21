@@ -132,7 +132,7 @@ class GutendexService:
         for i, line in enumerate(lines):
             if 'START OF' in line.upper() and 'PROJECT GUTENBERG' in line.upper():
                 start_idx = i + 1  # Start from the line after the marker
-                print(f"✅ Found START marker at line {i}: {line[:60]}...")
+                print(f"Found START marker at line {i}: {line[:60]}...")
                 break
         
         # Find the end marker
@@ -140,7 +140,7 @@ class GutendexService:
         for i in range(len(lines) - 1, -1, -1):
             if 'END OF' in lines[i].upper() and 'PROJECT GUTENBERG' in lines[i].upper():
                 end_idx = i  # End at the line before the marker
-                print(f"✅ Found END marker at line {i}: {lines[i][:60]}...")
+                print(f"Found END marker at line {i}: {lines[i][:60]}...")
                 break
         
         # Extract the content between markers
@@ -155,7 +155,7 @@ class GutendexService:
         text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
         text = text.strip()
         
-        print(f"📊 Final text length: {len(text)} characters, {len(text.split())} words")
+        print(f"Final text length: {len(text)} characters, {len(text.split())} words")
         
         return text
 
