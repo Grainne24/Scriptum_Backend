@@ -7,7 +7,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from app.database import get_db
-from app.models import Book
+from app.models import Book, StylometricProfile
 from app.schemas import BookCreate, BookResponse, BookUpdate
 from app.services.gutendex_service import gutendex_service
 
@@ -160,3 +160,35 @@ def delete_book(book_id: UUID, db: Session = Depends(get_db)):
     db.commit()
     
     return None
+
+@router.get("/analyzed", response_model=List[dict])
+def get_analyzed_books(limit: int = 10, db: Session = Depends(get_db)):
+    """
+    Get books that have been analyzed with their stylometric profiles
+    """
+    # Query books that are analyzed and have profiles
+    books = db.query(Book).filter(Book.analyzed == True).limit(limit).all()
+    
+    result = []
+    for book in books:
+        # Get the stylometric profile
+        profile = db.query(StylometricProfile).filter(
+            StylometricProfile.book_id == book.book_id
+        ).first()
+        
+        if profile:
+            result.append({
+                "book_id": str(book.book_id),
+                "title": book.title,
+                "author": book.author,
+                "publication_year": book.publication_year,
+                "analyzed": book.analyzed,
+                "pacing_score": float(profile.pacing_score) if profile.pacing_score else None,
+                "tone_score": float(profile.tone_score) if profile.tone_score else None,
+                "vocabulary_richness": float(profile.vocabulary_richness) if profile.vocabulary_richness else None,
+                "avg_sentence_length": float(profile.avg_sentence_length) if profile.avg_sentence_length else None,
+                "avg_word_length": float(profile.avg_word_length) if profile.avg_word_length else None,
+                "lexical_diversity": float(profile.lexical_diversity) if profile.lexical_diversity else None
+            })
+    
+    return result
