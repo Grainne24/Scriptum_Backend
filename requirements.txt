@@ -6,13 +6,5 @@ python-dotenv==1.0.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
 email-validator==2.1.0
-faststylometry
-httpx
+httpx==0.25.2
 gunicorn==21.2.0
- 
-venv/
-__pycache__/
-*.pyc
-.env
-*.db
-.DS_Store
