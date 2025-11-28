@@ -13,6 +13,83 @@ from app.services.gutendex_service import gutendex_service
 
 router = APIRouter(prefix="/books", tags=["books"])
 
+#This imports the book metadata from 
+@router.put("/{book_id}", response_model=BookResponse)
+def update_book(book_id: UUID, book_update: BookUpdate, db: Session = Depends(get_db)):
+    book = db.query(Book).filter(Book.book_id == book_id).first()
+    
+    if not book:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Book not found"
+        )
+    
+    #Update only provided fields
+    update_data = book_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(book, key, value)
+    
+    db.commit()
+    db.refresh(book)
+    
+    return book
+
+@router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_book(book_id: UUID, db: Session = Depends(get_db)):
+    book = db.query(Book).filter(Book.book_id == book_id).first()
+    
+    if not book:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Book not found"
+        )
+    
+    db.delete(book)
+    db.commit()
+    
+    return None
+
+@router.get("/analyzed")
+def get_analyzed_books(limit: int = 6, db: Session = Depends(get_db)):
+    """
+    Get books that have been analyzed with their stylometric profiles
+    """
+    try:
+        # Query books that are analyzed and have profiles
+        books = db.query(Book).filter(Book.analyzed == True).limit(limit).all()
+        
+        result = []
+        for book in books:
+            # Get the stylometric profile
+            profile = db.query(StylometricProfile).filter(
+                StylometricProfile.book_id == book.book_id
+            ).first()
+            
+            if profile:
+                result.append({
+                    "book_id": str(book.book_id),
+                    "title": book.title,
+                    "author": book.author,
+                    "publication_year": book.publication_year,
+                    "analyzed": book.analyzed,
+                    "pacing_score": float(profile.pacing_score) if profile.pacing_score else None,
+                    "tone_score": float(profile.tone_score) if profile.tone_score else None,
+                    "vocabulary_richness": float(profile.vocabulary_richness) if profile.vocabulary_richness else None,
+                    "avg_sentence_length": float(profile.avg_sentence_length) if profile.avg_sentence_length else None,
+                    "avg_word_length": float(profile.avg_word_length) if profile.avg_word_length else None,
+                    "lexical_diversity": float(profile.lexical_diversity) if profile.lexical_diversity else None
+                })
+        
+        print(f"Returning {len(result)} analyzed books")
+        return result
+        
+    except Exception as e:
+        print(f"Error fetching analyzed books: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch books: {str(e)}"
+        )
+
 # This searches gutenberg for a book which a user inputs the name of
 @router.get("/search-gutendex")
 async def search_gutendex(
@@ -124,80 +201,3 @@ def get_book(book_id: UUID, db: Session = Depends(get_db)):
         )
     
     return book
-
-#This imports the book metadata from 
-@router.put("/{book_id}", response_model=BookResponse)
-def update_book(book_id: UUID, book_update: BookUpdate, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.book_id == book_id).first()
-    
-    if not book:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Book not found"
-        )
-    
-    #Update only provided fields
-    update_data = book_update.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(book, key, value)
-    
-    db.commit()
-    db.refresh(book)
-    
-    return book
-
-@router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_book(book_id: UUID, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.book_id == book_id).first()
-    
-    if not book:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Book not found"
-        )
-    
-    db.delete(book)
-    db.commit()
-    
-    return None
-
-@router.get("/analyzed")
-def get_analyzed_books(limit: int = 6, db: Session = Depends(get_db)):
-    """
-    Get books that have been analyzed with their stylometric profiles
-    """
-    try:
-        # Query books that are analyzed and have profiles
-        books = db.query(Book).filter(Book.analyzed == True).limit(limit).all()
-        
-        result = []
-        for book in books:
-            # Get the stylometric profile
-            profile = db.query(StylometricProfile).filter(
-                StylometricProfile.book_id == book.book_id
-            ).first()
-            
-            if profile:
-                result.append({
-                    "book_id": str(book.book_id),
-                    "title": book.title,
-                    "author": book.author,
-                    "publication_year": book.publication_year,
-                    "analyzed": book.analyzed,
-                    "pacing_score": float(profile.pacing_score) if profile.pacing_score else None,
-                    "tone_score": float(profile.tone_score) if profile.tone_score else None,
-                    "vocabulary_richness": float(profile.vocabulary_richness) if profile.vocabulary_richness else None,
-                    "avg_sentence_length": float(profile.avg_sentence_length) if profile.avg_sentence_length else None,
-                    "avg_word_length": float(profile.avg_word_length) if profile.avg_word_length else None,
-                    "lexical_diversity": float(profile.lexical_diversity) if profile.lexical_diversity else None
-                })
-        
-        print(f"Returning {len(result)} analyzed books")
-        return result
-        
-    except Exception as e:
-        print(f"Error fetching analyzed books: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch books: {str(e)}"
-        )
