@@ -72,6 +72,7 @@ def get_analyzed_books(limit: int = 6, db: Session = Depends(get_db)):
                     "author": book.author,
                     "publication_year": book.publication_year,
                     "analyzed": book.analyzed,
+                    "cover_url": book.cover_url,
                     "pacing_score": float(profile.pacing_score) if profile.pacing_score else None,
                     "tone_score": float(profile.tone_score) if profile.tone_score else None,
                     "vocabulary_richness": float(profile.vocabulary_richness) if profile.vocabulary_richness else None,
