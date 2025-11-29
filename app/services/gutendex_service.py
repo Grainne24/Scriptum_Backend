@@ -51,6 +51,7 @@ class GutendexService:
                         "title": book.get("title", "Unknown Title"),
                         "authors": author_names,
                         "author": author_names[0] if author_names else "Unknown",
+                        "cover_url": cover_url,
                         "subjects": book.get("subjects", []),
                         "languages": book.get("languages", []),
                         "download_count": book.get("download_count", 0),
@@ -77,12 +78,23 @@ class GutendexService:
                 
                 authors_list = book.get("authors", [])
                 author_names = [author.get("name", "Unknown") for author in authors_list]
+
+                formats = data.get("formats", {})
+                cover_url = formats.get("image/jpeg") or formats.get("image/png")
+
+                subjects = data.get("subjects", [])
+                    year = None
+                    for subject in subjects:
+                        if "century" in subject.lower():
+                            #Try to extract year from subjects
+                            pass
                 
                 return {
                     "gutenberg_id": book.get("id"),
                     "title": book.get("title", "Unknown Title"),
                     "authors": author_names,
                     "author": author_names[0] if author_names else "Unknown",
+                    "cover_url": cover_url,
                     "subjects": book.get("subjects", []),
                     "languages": book.get("languages", []),
                     "download_count": book.get("download_count", 0),
