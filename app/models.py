@@ -36,6 +36,7 @@ class Book(Base):
     publication_year = Column(Integer, nullable=True)
     isbn = Column(String(13), nullable=True)
     text_file_path = Column(Text, nullable=True)
+    cover_url = Column(String(500), nullable=True)
     text_source = Column(String(100), nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
     analyzed = Column(Boolean, default=False, index=True)
