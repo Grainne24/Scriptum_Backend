@@ -139,6 +139,7 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
         #Check if already in database
         title = book_data["title"]
         author = book_data["author"]
+        cover_url = book_data.get("cover_url")
         
         existing_book = db.query(Book).filter(
             Book.title == title,
@@ -146,6 +147,10 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
         ).first()
         
         if existing_book:
+            if not existing_book.cover_url and cover_url:
+                existing_book.cover_url = cover_url
+                db.commit()
+                db.refresh(existing_book)
             return existing_book
         
         #Create new book entry
@@ -153,7 +158,8 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
             title=title,
             author=author,
             text_source=f"Project Gutenberg (ID: {gutenberg_id})",
-            text_file_path=f"gutenberg_{gutenberg_id}"
+            text_file_path=f"gutenberg_{gutenberg_id}",
+            cover_url=cover_url
         )
         
         db.add(new_book)
