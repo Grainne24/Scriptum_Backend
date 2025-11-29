@@ -10,7 +10,7 @@ class GutendexService:
     
     BASE_URL = "https://gutendex.com/books/"  
     
-    #This returns list of book with its metadata
+    # This returns list of book with its metadata
     async def search_books(
         self, 
         search: Optional[str] = None,
@@ -21,7 +21,7 @@ class GutendexService:
 
         params = {}
         
-        # Build search query
+        #Build search query
         if search:
             params["search"] = search
         elif author:
@@ -46,6 +46,10 @@ class GutendexService:
                     authors_list = book.get("authors", [])
                     author_names = [author.get("name", "Unknown") for author in authors_list]
                     
+                    # Get cover URL from formats
+                    formats = book.get("formats", {})
+                    cover_url = formats.get("image/jpeg") or formats.get("image/png")
+                    
                     books.append({
                         "gutenberg_id": book.get("id"),
                         "title": book.get("title", "Unknown Title"),
@@ -66,7 +70,7 @@ class GutendexService:
                 print(f"Error searching Gutendex: {e}")
                 raise
     
-    #This gets the book metadat by its Gutenberg ID which returns the book directory or None
+    #This gets the book metadata by its Gutenberg ID which returns the book directory or None
     async def get_book_by_id(self, gutenberg_id: int) -> Optional[Dict]:
         url = f"{self.BASE_URL}{gutenberg_id}/"
         
@@ -79,15 +83,9 @@ class GutendexService:
                 authors_list = book.get("authors", [])
                 author_names = [author.get("name", "Unknown") for author in authors_list]
 
-                formats = data.get("formats", {})
+                #Get cover URL and formats
+                formats = book.get("formats", {})
                 cover_url = formats.get("image/jpeg") or formats.get("image/png")
-
-                subjects = data.get("subjects", [])
-                    year = None
-                    for subject in subjects:
-                        if "century" in subject.lower():
-                            #Try to extract year from subjects
-                            pass
                 
                 return {
                     "gutenberg_id": book.get("id"),
@@ -100,7 +98,8 @@ class GutendexService:
                     "download_count": book.get("download_count", 0),
                     "formats": book.get("formats", {})
                 }
-            except:
+            except Exception as e:
+                print(f"Error fetching book {gutenberg_id}: {e}")
                 return None
     
     #This downloads the whole book script if its available
@@ -120,10 +119,9 @@ class GutendexService:
                     
                     # Clean the text (remove Project Gutenberg header/footer)
                     text = response.text
-                    print(text)
+                    print(f"Raw text length: {len(text)}")
                     text = self._clean_gutenberg_text(text)
-                    print ("===================================================")
-                    print(text)
+                    print(f"Cleaned text length: {len(text)}")
                     
                     if len(text) > 1000:  # Make sure we got actual content
                         print(f"Successfully fetched {len(text)} characters")
@@ -136,10 +134,10 @@ class GutendexService:
             return None
     
     def _clean_gutenberg_text(self, text: str) -> str:
-        # Split text into lines for easier processing
+        #Split text into lines for easier processing
         lines = text.split('\n')
         
-        # Find the start marker
+        #Find the start marker
         start_idx = 0
         for i, line in enumerate(lines):
             if 'START OF' in line.upper() and 'PROJECT GUTENBERG' in line.upper():
@@ -147,7 +145,7 @@ class GutendexService:
                 print(f"Found START marker at line {i}: {line[:60]}...")
                 break
         
-        # Find the end marker
+        #Find the end marker
         end_idx = len(lines)
         for i in range(len(lines) - 1, -1, -1):
             if 'END OF' in lines[i].upper() and 'PROJECT GUTENBERG' in lines[i].upper():
@@ -155,15 +153,15 @@ class GutendexService:
                 print(f"Found END marker at line {i}: {lines[i][:60]}...")
                 break
         
-        # Extract the content between markers
+        #Extract the content between markers
         content_lines = lines[start_idx:end_idx]
         text = '\n'.join(content_lines)
         
-        # Additional cleaning - remove common prefatory material
-        # Remove "Produced by..." lines
+        #Additional cleaning - remove common prefatory material
+        #Remove "Produced by..." lines
         text = re.sub(r'Produced by[^\n]*\n', '', text, flags=re.IGNORECASE)
         
-        # Remove excessive whitespace
+        #Remove excessive whitespace
         text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
         text = text.strip()
         
@@ -171,5 +169,5 @@ class GutendexService:
         
         return text
 
-# Create singleton instance
+#Create singleton instance
 gutendex_service = GutendexService()
