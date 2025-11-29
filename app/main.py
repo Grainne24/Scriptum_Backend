@@ -9,7 +9,6 @@ from app.routers import users, books
 from app.routers import stylometry  # Add this import
 
 #Createa database tables
-Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
 
 #This initialize FastAPI app
