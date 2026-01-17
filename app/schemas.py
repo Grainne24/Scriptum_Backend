@@ -1,29 +1,33 @@
 '''
     This file defines what the data should look like when it comes in and goes out of the API which validates data automatically
 '''
-#pydantic - data validation + settings management
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-#Schema for creating a user e.g. must be of valid email format
+# Login request
+class UserLogin(BaseModel):
+    email: str  # Can be email or username
+    password: str
+
+# Registration request
 class UserCreate(BaseModel):
     email: EmailStr
-    username: str = Field(..., min_length=3, max_length=30)
+    username: str = Field(..., min_length=3, max_length=100)
     password: str = Field(..., min_length=8)
 
-#Schema for returning data so what the API sends back
+# User response
 class UserResponse(BaseModel):
     user_id: UUID
+    email: EmailStr
+    username: str
     created_at: datetime
     is_active: bool
     last_login: Optional[datetime] = None
     
-    #This tells the pydantic to work with SQLAlchemy models
     model_config = ConfigDict(from_attributes=True)
 
-# Book Schemas
 class BookBase(BaseModel):
     title: str = Field(..., max_length=500)
     author: str = Field(..., max_length=255)
@@ -64,3 +68,7 @@ class RatingResponse(BaseModel):
     rated_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+
+# Error response
+class ErrorResponse(BaseModel):
+    detail: str
