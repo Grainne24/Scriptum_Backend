@@ -31,6 +31,7 @@ class Book(Base):
     __tablename__ = "books"
     
     book_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    gutenberg_id = Column(Integer, unique=True, nullable=True, index=True)
     title = Column(String(500), nullable=False)
     author = Column(String(255), nullable=False, index=True)
     publication_year = Column(Integer, nullable=True)
