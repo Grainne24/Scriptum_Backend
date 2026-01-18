@@ -43,7 +43,7 @@ def fetch_all_books(max_books=10000):
             
         except requests.exceptions.RequestException as e:
             print(f"Error fetching data: {e}")
-            print("Waiting 5 seconds before retrying...")
+            print("Waiting before fetching again")
             time.sleep(5)
             continue
     
@@ -65,23 +65,23 @@ def prepare_book_data(book):
     book_id = str(uuid.uuid4())
     
     return (
-        book_id,  # book_id (UUID)
-        book.get('id'),  # gutenberg_id
-        book.get('title', 'Unknown Title'),  # title
-        author,  # author
-        pub_year,  # publication_year
-        None,  # isbn (Gutenberg doesn't have ISBNs)
-        text_file,  # text_file_path
-        cover_url,  # cover_url
-        f"Project Gutenberg (ID: {book.get('id')})"  # text_source
+        book_id,
+        book.get('id'),
+        book.get('title', 'Unknown Title'),
+        author, 
+        pub_year,  
+        None, 
+        text_file,
+        cover_url,
+        f"Project Gutenberg (ID: {book.get('id')})"
     )
 
 def bulk_insert_books(books, batch_size=500):
-    print("\nConnecting to database...")
+    print("\nConnecting to database")
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
 
-    print("Checking database schema...")
+    print("Checking database schema")
     try:
         cur.execute("""
             ALTER TABLE books 
@@ -92,15 +92,15 @@ def bulk_insert_books(books, batch_size=500):
             ON books(gutenberg_id);
         """)
         conn.commit()
-        print("✓ Schema updated successfully")
+        print("Schema updated successfully")
     except Exception as e:
         print(f"Schema update error (might already exist): {e}")
         conn.rollback()
 
-    print("\nPreparing book data...")
+    print("\nPreparing book data")
     book_data = [prepare_book_data(book) for book in books]
 
-    print(f"\nInserting {len(book_data)} books in batches of {batch_size}...")
+    print(f"\nInserting {len(book_data)} books in batches of {batch_size}")
     inserted_count = 0
     updated_count = 0
     
@@ -127,10 +127,10 @@ def bulk_insert_books(books, batch_size=500):
             
             conn.commit()
             inserted_count += len(batch)
-            print(f"✓ Batch {batch_num}/{total_batches} complete ({inserted_count}/{len(book_data)} books)")
+            print(f"Batch {batch_num}/{total_batches} complete ({inserted_count}/{len(book_data)} books)")
             
         except Exception as e:
-            print(f"✗ Error inserting batch {batch_num}: {e}")
+            print(f"Error inserting batch {batch_num}: {e}")
             conn.rollback()
     
     cur.execute("SELECT COUNT(*) FROM books WHERE gutenberg_id IS NOT NULL")
@@ -158,7 +158,7 @@ if __name__ == "__main__":
         bulk_insert_books(books)
         
     except KeyboardInterrupt:
-        print("\n\n✗ Import cancelled by user")
+        print("\n\nImport cancelled by user")
     except Exception as e:
-        print(f"\n✗ Fatal error: {e}")
+        print(f"\nFatal error: {e}")
         raise
