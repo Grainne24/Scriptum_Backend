@@ -10,10 +10,8 @@ import os
 import uuid
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
-# Your Render database URL
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
