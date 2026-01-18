@@ -21,11 +21,8 @@ def hash_password(password: str) -> str:
 
 @router.post("/login", response_model=UserResponse)
 def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
-    """
-    Login endpoint - validates user credentials
-    Email can be either email address or username
-    """
-    print(f"🔍 Login attempt for: {login_data.email}")
+
+    print(f"Login attempt for: {login_data.email}")
     
     try:
         # Hash the provided password
@@ -38,7 +35,7 @@ def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
         ).first()
         
         if not user:
-            print(f"❌ Login failed: Invalid credentials")
+            print(f"Login failed: Invalid credentials")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email/username or password"
@@ -48,13 +45,13 @@ def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
         user.last_login = datetime.now()
         db.commit()
         
-        print(f"✅ Login successful for user: {user.username}")
+        print(f"Login successful for user: {user.username}")
         return user
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Login error: {str(e)}")
+        print(f"Login error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Login failed: {str(e)}"
@@ -62,8 +59,7 @@ def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
-    """Create a new user"""
-    print(f"🔍 Attempting to create user: {user.email}, {user.username}")
+    print(f"Attempting to create user: {user.email}, {user.username}")
     
     try:
         # Check if user already exists
@@ -79,7 +75,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
             )
         
         # Create new user
-        print(f"✅ Creating new user...")
+        print(f"Creating new user...")
         db_user = User(
             email=user.email,
             username=user.username,
@@ -90,13 +86,13 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(db_user)
         
-        print(f"✅ User created successfully: {db_user.user_id}")
+        print(f"User created successfully: {db_user.user_id}")
         return db_user
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error creating user: {str(e)}")
+        print(f"Error creating user: {str(e)}")
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -41,9 +41,12 @@ class BookCreate(BookBase):
 class BookUpdate(BaseModel):
     title: Optional[str] = None
     author: Optional[str] = None
+    isbn: Optional[str] = None
+    text_source: Optional[str] = None
     publication_year: Optional[int] = None
     text_file_path: Optional[str] = None
     analyzed: Optional[bool] = None
+    cover_url: Optional[str] = None
 
 class BookResponse(BookBase):
     book_id: UUID

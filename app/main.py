@@ -1,7 +1,6 @@
 '''
     This creates the FastAPI and registers all routers and sets up CORS
 '''
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
@@ -39,12 +38,13 @@ def health_check():
 #Root endpoint
 @app.get("/", tags=["root"])
 def read_root():
+    
     return {
         "message": "Welcome to Scriptum API",
         "docs": "/docs",
         "health": "/health"
     }
-
+    
 #This adds all endpoints from each router
 app.include_router(users.router)
 app.include_router(books.router)
