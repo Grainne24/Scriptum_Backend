@@ -19,11 +19,11 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable not set")
 
-def fetch_all_books():
+def fetch_all_books(max_books=10000):
     all_books = []
     url = "https://gutendex.com/books/"
     
-    while url:
+    while url and len(all_books) < max_books:
         print(f"Fetching: {url}")
         try:
             response = requests.get(url, timeout=30)
@@ -32,8 +32,13 @@ def fetch_all_books():
             
             all_books.extend(data['results'])
             url = data.get('next')
+
+            if len(all_books) >= max_books:
+                all_books = all_books[:max_books]
+                print(f"Reached limit of {max_books} books")
+                break
             
-            print(f"Fetched {len(all_books)} books so far...")
+            print(f"Fetched {len(all_books)} books so far..")
             time.sleep(1)
             
         except requests.exceptions.RequestException as e:
