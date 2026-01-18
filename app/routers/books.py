@@ -200,7 +200,7 @@ def get_books(
 @router.get("/paginated")
 def get_books_paginated(
     page: int = 1,
-    page_size: int = 32,
+    page_size: int = 5,
     search: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
