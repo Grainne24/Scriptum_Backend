@@ -52,6 +52,7 @@ class BookResponse(BookBase):
     book_id: UUID
     created_at: datetime
     analyzed: bool
+    summaries: Optional[str]
     text_source: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
