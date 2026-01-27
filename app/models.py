@@ -36,6 +36,7 @@ class Book(Base):
     author = Column(String(255), nullable=False, index=True)
     publication_year = Column(Integer, nullable=True)
     isbn = Column(String(13), nullable=True)
+    summary = Column(Text)
     text_file_path = Column(Text, nullable=True)
     cover_url = Column(String(500), nullable=True)
     text_source = Column(String(100), nullable=True)
@@ -59,8 +60,8 @@ class StylometricProfile(Base):
     avg_sentence_length = Column(DECIMAL(6, 2), nullable=True)
     avg_word_length = Column(DECIMAL(5, 2), nullable=True)
     lexical_diversity = Column(DECIMAL(5, 4), nullable=True)
-    punctuation_density = Column(DECIMAL(5, 4), nullable=True)  # Make sure this is here
-    dialogue_percentage = Column(DECIMAL(5, 2), nullable=True)  # Make sure this is here
+    punctuation_density = Column(DECIMAL(5, 4), nullable=True)  
+    dialogue_percentage = Column(DECIMAL(5, 2), nullable=True)  
     total_words = Column(Integer, nullable=True)
     total_sentences = Column(Integer, nullable=True)
     unique_words = Column(Integer, nullable=True)

@@ -61,6 +61,9 @@ def prepare_book_data(book):
     cover_url = book.get('formats', {}).get('image/jpeg')
 
     book_id = str(uuid.uuid4())
+
+    summaries = book.get('summaries', [])
+    summary = summaries[0] if summaries else None
     
     return (
         book_id,
@@ -71,7 +74,8 @@ def prepare_book_data(book):
         None, 
         text_file,
         cover_url,
-        f"Project Gutenberg (ID: {book.get('id')})"
+        f"Project Gutenberg (ID: {book.get('id')})",
+        summaries
     )
 
 def bulk_insert_books(books, batch_size=500):
@@ -84,6 +88,10 @@ def bulk_insert_books(books, batch_size=500):
         cur.execute("""
             ALTER TABLE books 
             ADD COLUMN IF NOT EXISTS gutenberg_id INTEGER UNIQUE;
+        """)
+        cur.execute("""
+            ALTER TABLE books 
+            ADD COLUMN IF NOT EXISTS summary TEXT;
         """)
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_books_gutenberg_id 

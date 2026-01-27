@@ -52,7 +52,7 @@ class BookResponse(BookBase):
     book_id: UUID
     created_at: datetime
     analyzed: bool
-    summaries: Optional[str]
+    summary: Optional[str]
     text_source: Optional[str] = None
     cover_url: Optional[str] = None
     
