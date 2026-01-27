@@ -54,6 +54,7 @@ class BookResponse(BookBase):
     analyzed: bool
     summaries: Optional[str]
     text_source: Optional[str] = None
+    cover_url: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 

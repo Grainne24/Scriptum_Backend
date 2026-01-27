@@ -196,6 +196,59 @@ def get_books(
     
     books = query.offset(skip).limit(limit).all()
     return books
+    
+@router.get("/paginated")
+def get_books_paginated(
+    page: int = 1,
+    page_size: int = 5,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+
+    offset = (page - 1) * page_size
+
+    query = db.query(Book)
+
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter(
+            (Book.title.ilike(search_filter)) | 
+            (Book.author.ilike(search_filter))
+        )
+
+    total_count = query.count()
+
+    books = query.offset(offset).limit(page_size).all()
+
+    total_pages = (total_count + page_size - 1) // page_size
+    has_next = page < total_pages
+    has_previous = page > 1
+
+    return {
+        "count": total_count,
+        "next": f"/books/paginated?page={page + 1}&page_size={page_size}" + (f"&search={search}" if search else "") if has_next else None,
+        "previous": f"/books/paginated?page={page - 1}&page_size={page_size}" + (f"&search={search}" if search else "") if has_previous else None,
+        "results": books
+    }
+
+@router.get("/", response_model=List[BookResponse])
+def get_books(
+    skip: int = 0, 
+    limit: int = 100,
+    author: Optional[str] = None,
+    analyzed: Optional[bool] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Book)
+    
+    if author:
+        query = query.filter(Book.author.ilike(f"%{author}%"))
+    
+    if analyzed is not None:
+        query = query.filter(Book.analyzed == analyzed)
+    
+    books = query.offset(skip).limit(limit).all()
+    return books
 
 @router.get("/{book_id}", response_model=BookResponse)
 def get_book(book_id: UUID, db: Session = Depends(get_db)):
