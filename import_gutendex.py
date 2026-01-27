@@ -61,7 +61,7 @@ def prepare_book_data(book):
     cover_url = book.get('formats', {}).get('image/jpeg')
 
     book_id = str(uuid.uuid4())
-
+    
     summaries = book.get('summaries', [])
     summary = summaries[0] if summaries else None
     
@@ -75,7 +75,7 @@ def prepare_book_data(book):
         text_file,
         cover_url,
         f"Project Gutenberg (ID: {book.get('id')})",
-        summaries
+        summary  
     )
 
 def bulk_insert_books(books, batch_size=500):
@@ -89,14 +89,17 @@ def bulk_insert_books(books, batch_size=500):
             ALTER TABLE books 
             ADD COLUMN IF NOT EXISTS gutenberg_id INTEGER UNIQUE;
         """)
+
         cur.execute("""
             ALTER TABLE books 
             ADD COLUMN IF NOT EXISTS summary TEXT;
         """)
+        
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_books_gutenberg_id 
             ON books(gutenberg_id);
         """)
+        
         conn.commit()
         print("Schema updated successfully")
     except Exception as e:
@@ -108,7 +111,6 @@ def bulk_insert_books(books, batch_size=500):
 
     print(f"\nInserting {len(book_data)} books in batches of {batch_size}")
     inserted_count = 0
-    updated_count = 0
     
     for i in range(0, len(book_data), batch_size):
         batch = book_data[i:i + batch_size]
@@ -121,12 +123,13 @@ def bulk_insert_books(books, batch_size=500):
                 """
                 INSERT INTO books (book_id, gutenberg_id, title, author, 
                                  publication_year, isbn, text_file_path, 
-                                 cover_url, text_source)
+                                 cover_url, text_source, summary)
                 VALUES %s
                 ON CONFLICT (gutenberg_id) DO UPDATE SET
                     title = EXCLUDED.title,
                     cover_url = COALESCE(EXCLUDED.cover_url, books.cover_url),
-                    text_file_path = COALESCE(EXCLUDED.text_file_path, books.text_file_path)
+                    text_file_path = COALESCE(EXCLUDED.text_file_path, books.text_file_path),
+                    summary = EXCLUDED.summary
                 """,
                 batch
             )
@@ -141,6 +144,9 @@ def bulk_insert_books(books, batch_size=500):
     
     cur.execute("SELECT COUNT(*) FROM books WHERE gutenberg_id IS NOT NULL")
     total_gutenberg_books = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM books WHERE summary IS NOT NULL")
+    books_with_summary = cur.fetchone()[0]
     
     cur.close()
     conn.close()
@@ -150,6 +156,7 @@ def bulk_insert_books(books, batch_size=500):
     print(f"{'='*60}")
     print(f"Total books processed: {len(book_data)}")
     print(f"Total Gutenberg books in database: {total_gutenberg_books}")
+    print(f"Books with summaries: {books_with_summary}")
     print(f"{'='*60}")
 
 if __name__ == "__main__":
@@ -159,8 +166,6 @@ if __name__ == "__main__":
     
     try:
         books = fetch_all_books()
-        
-        # Insert into database
         bulk_insert_books(books)
         
     except KeyboardInterrupt:
