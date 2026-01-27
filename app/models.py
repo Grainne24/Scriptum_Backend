@@ -41,7 +41,7 @@ class Book(Base):
     cover_url = Column(String(500), nullable=True)
     text_source = Column(String(100), nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
-    analyzed = Column(Boolean, default=False, index=True)
+    analysed = Column(Boolean, default=False, index=True)
     
     # Relationships
     stylometric_profile = relationship("StylometricProfile", back_populates="book", uselist=False, cascade="all, delete-orphan")
@@ -66,9 +66,9 @@ class StylometricProfile(Base):
     total_sentences = Column(Integer, nullable=True)
     unique_words = Column(Integer, nullable=True)
     analysis_version = Column(String(20), nullable=True)
-    analyzed_at = Column(TIMESTAMP, server_default=func.now())
+    analysed_at = Column(TIMESTAMP, server_default=func.now())
     
-    # Relationships
+    #Relationships
     book = relationship("Book", back_populates="stylometric_profile")
 
 #Rating table
@@ -104,6 +104,6 @@ class Recommendation(Base):
     viewed = Column(Boolean, default=False)
     viewed_at = Column(TIMESTAMP, nullable=True)
     
-    # Relationships
+    #Relationships
     user = relationship("User", back_populates="recommendations")
     book = relationship("Book", back_populates="recommendations")

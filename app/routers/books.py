@@ -49,18 +49,18 @@ def delete_book(book_id: UUID, db: Session = Depends(get_db)):
     
     return None
 
-@router.get("/analyzed")
-def get_analyzed_books(limit: int = 6, db: Session = Depends(get_db)):
+@router.get("/analysed", response_model=List[BookResponse])
+def get_analysed_books(limit: int = 6, db: Session = Depends(get_db)):
     """
-    Get books that have been analyzed with their stylometric profiles
+    Get books that have been analysed with their stylometric profiles
     """
     try:
-        # Query books that are analyzed and have profiles
-        books = db.query(Book).filter(Book.analyzed == True).limit(limit).all()
+        #Queries the books that are analysed and have profiles
+        books = db.query(Book).filter(Book.analysed == True).limit(limit).all()
         
         result = []
         for book in books:
-            # Get the stylometric profile
+            #Gets the stylometric profile
             profile = db.query(StylometricProfile).filter(
                 StylometricProfile.book_id == book.book_id
             ).first()
@@ -71,8 +71,9 @@ def get_analyzed_books(limit: int = 6, db: Session = Depends(get_db)):
                     "title": book.title,
                     "author": book.author,
                     "publication_year": book.publication_year,
-                    "analyzed": book.analyzed,
+                    "analysed": book.analysed,
                     "cover_url": book.cover_url,
+                    "summary": book.summary,
                     "pacing_score": float(profile.pacing_score) if profile.pacing_score else None,
                     "tone_score": float(profile.tone_score) if profile.tone_score else None,
                     "vocabulary_richness": float(profile.vocabulary_richness) if profile.vocabulary_richness else None,
@@ -81,17 +82,17 @@ def get_analyzed_books(limit: int = 6, db: Session = Depends(get_db)):
                     "lexical_diversity": float(profile.lexical_diversity) if profile.lexical_diversity else None
                 })
         
-        print(f"Returning {len(result)} analyzed books")
+        print(f"Returning {len(result)} analysed books")
         return result
         
     except Exception as e:
-        print(f"Error fetching analyzed books: {str(e)}")
+        print(f"Error fetching analysed books: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch books: {str(e)}"
         )
 
-# This searches gutenberg for a book which a user inputs the name of
+#This searches gutenberg for a book which a user inputs the name of
 @router.get("/search-gutendex")
 async def search_gutendex(
     query: Optional[str] = None,
@@ -183,7 +184,7 @@ def get_books(
     skip: int = 0, 
     limit: int = 100,
     author: Optional[str] = None,
-    analyzed: Optional[bool] = None,
+    analysed: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
     query = db.query(Book)
@@ -191,8 +192,8 @@ def get_books(
     if author:
         query = query.filter(Book.author.ilike(f"%{author}%"))
     
-    if analyzed is not None:
-        query = query.filter(Book.analyzed == analyzed)
+    if analysed is not None:
+        query = query.filter(Book.analysed == analysed)
     
     books = query.offset(skip).limit(limit).all()
     return books
@@ -245,13 +246,13 @@ def delete_book(book_id: UUID, db: Session = Depends(get_db)):
     
     return None
 
-@router.get("/analyzed", response_model=List[dict])
-def get_analyzed_books(limit: int = 10, db: Session = Depends(get_db)):
+@router.get("/analysed", response_model=List[dict])
+def get_analysed_books(limit: int = 10, db: Session = Depends(get_db)):
     """
-    Get books that have been analyzed with their stylometric profiles
+    Get books that have been analysed with their stylometric profiles
     """
-    #It will query books that are analyzed and have profiles
-    books = db.query(Book).filter(Book.analyzed == True).limit(limit).all()
+    #It will query books that are analysed and have profiles
+    books = db.query(Book).filter(Book.analysed == True).limit(limit).all()
     
     result = []
     for book in books:
@@ -266,7 +267,7 @@ def get_analyzed_books(limit: int = 10, db: Session = Depends(get_db)):
                 "title": book.title,
                 "author": book.author,
                 "publication_year": book.publication_year,
-                "analyzed": book.analyzed,
+                "analysed": book.analysed,
                 "pacing_score": float(profile.pacing_score) if profile.pacing_score else None,
                 "tone_score": float(profile.tone_score) if profile.tone_score else None,
                 "vocabulary_richness": float(profile.vocabulary_richness) if profile.vocabulary_richness else None,

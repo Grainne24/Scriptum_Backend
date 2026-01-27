@@ -6,18 +6,18 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-# Login request
+#Login request
 class UserLogin(BaseModel):
     email: str  # Can be email or username
     password: str
 
-# Registration request
+#Registration request
 class UserCreate(BaseModel):
     email: EmailStr
     username: str = Field(..., min_length=3, max_length=100)
     password: str = Field(..., min_length=8)
 
-# User response
+#User response
 class UserResponse(BaseModel):
     user_id: UUID
     email: EmailStr
@@ -45,20 +45,26 @@ class BookUpdate(BaseModel):
     text_source: Optional[str] = None
     publication_year: Optional[int] = None
     text_file_path: Optional[str] = None
-    analyzed: Optional[bool] = None
+    analysed: Optional[bool] = None
     cover_url: Optional[str] = None
 
 class BookResponse(BookBase):
     book_id: UUID
     created_at: datetime
     analyzed: bool
-    summary: Optional[str]
+    summary: Optional[str] = None
     text_source: Optional[str] = None
     cover_url: Optional[str] = None
+    pacing_score: Optional[float] = None
+    tone_score: Optional[float] = None
+    vocabulary_richness: Optional[float] = None
+    avg_sentence_length: Optional[float] = None
+    avg_word_length: Optional[float] = None
+    lexical_diversity: Optional[float] = None
     
     model_config = ConfigDict(from_attributes=True)
 
-# Rating Schemas
+#Rating Schemas
 class RatingCreate(BaseModel):
     book_id: UUID
     rating: float = Field(..., ge=0.0, le=10.0)
@@ -74,6 +80,6 @@ class RatingResponse(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
 
-# Error response
+#Error response
 class ErrorResponse(BaseModel):
     detail: str

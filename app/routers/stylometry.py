@@ -28,7 +28,7 @@ async def analyze_book_from_gutenberg(
             detail="Book not found"
         )
     
-    #Check if it has already been analyzed
+    #Check if it has already been analysed
     existing_profile = db.query(StylometricProfile).filter(
         StylometricProfile.book_id == book_id
     ).first()
@@ -36,7 +36,7 @@ async def analyze_book_from_gutenberg(
     if existing_profile:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Book has already been analyzed"
+            detail="Book has already been analysed"
         )
     
     #Extracts the Gutenberg ID from text_source
@@ -91,13 +91,13 @@ async def analyze_book_from_gutenberg(
         db.add(profile)
         
         #Updatse book as analysed
-        book.analyzed = True
+        book.analysed = True
         
         db.commit()
         db.refresh(profile)
         
         return {
-            "message": "Book analyzed successfully",
+            "message": "Book analysed successfully",
             "book_id": str(book_id),
             "book_title": book.title,
             "gutenberg_id": gutenberg_id,
@@ -135,7 +135,7 @@ def analyze_book_with_text(
     if existing_profile:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Book has already been analyzed"
+            detail="Book has already been analysed"
         )
     
     try:
@@ -163,13 +163,13 @@ def analyze_book_with_text(
             profile.dialogue_percentage = analysis_results.get("dialogue_percentage")
         
         db.add(profile)
-        book.analyzed = True
+        book.analysed = True
         
         db.commit()
         db.refresh(profile)
         
         return {
-            "message": "Book analyzed successfully",
+            "message": "Book analysed successfully",
             "book_id": str(book_id),
             "analysis": analysis_results
         }
@@ -196,7 +196,7 @@ def get_stylometric_profile(book_id: UUID, db: Session = Depends(get_db)):
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Stylometric profile not found. Book may not be analyzed yet."
+            detail="Stylometric profile not found. Book may not be analysed yet."
         )
     
     return {
@@ -210,5 +210,5 @@ def get_stylometric_profile(book_id: UUID, db: Session = Depends(get_db)):
         "total_words": profile.total_words,
         "total_sentences": profile.total_sentences,
         "unique_words": profile.unique_words,
-        "analyzed_at": profile.analyzed_at
+        "analysed_at": profile.analysed_at
     }
