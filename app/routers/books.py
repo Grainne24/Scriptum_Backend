@@ -13,67 +13,32 @@ from app.services.gutendex_service import gutendex_service
 
 router = APIRouter(prefix="/books", tags=["books"])
 
-#This imports the book metadata from 
-@router.put("/{book_id}", response_model=BookResponse)
-def update_book(book_id: UUID, book_update: BookUpdate, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.book_id == book_id).first()
-    
-    if not book:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Book not found"
-        )
-    
-    #Update only provided fields
-    update_data = book_update.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(book, key, value)
-    
-    db.commit()
-    db.refresh(book)
-    
-    return book
-
-@router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_book(book_id: UUID, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.book_id == book_id).first()
-    
-    if not book:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Book not found"
-        )
-    
-    db.delete(book)
-    db.commit()
-    
-    return None
 
 @router.get("/analysed", response_model=List[BookResponse])
-def get_analysed_books(limit: int = 6, db: Session = Depends(get_db)):
+def get_analysed_books(limit: int = 10, db: Session = Depends(get_db)):
     """
     Get books that have been analysed with their stylometric profiles
     """
     try:
-        #Queries the books that are analysed and have profiles
         books = db.query(Book).filter(Book.analysed == True).limit(limit).all()
         
         result = []
         for book in books:
-            #Gets the stylometric profile
             profile = db.query(StylometricProfile).filter(
                 StylometricProfile.book_id == book.book_id
             ).first()
             
             if profile:
                 result.append({
-                    "book_id": str(book.book_id),
+                    "book_id": book.book_id,
                     "title": book.title,
                     "author": book.author,
                     "publication_year": book.publication_year,
+                    "created_at": book.created_at,
                     "analysed": book.analysed,
                     "cover_url": book.cover_url,
                     "summary": book.summary,
+                    "text_source": book.text_source,
                     "pacing_score": float(profile.pacing_score) if profile.pacing_score else None,
                     "tone_score": float(profile.tone_score) if profile.tone_score else None,
                     "vocabulary_richness": float(profile.vocabulary_richness) if profile.vocabulary_richness else None,
@@ -120,6 +85,25 @@ async def search_gutendex(
             detail=f"Failed to search Gutendex: {str(e)}"
         )
 
+@router.get("/", response_model=List[BookResponse])
+def get_books(
+    skip: int = 0, 
+    limit: int = 100,
+    author: Optional[str] = None,
+    analysed: Optional[bool] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Book)
+    
+    if author:
+        query = query.filter(Book.author.ilike(f"%{author}%"))
+    
+    if analysed is not None:
+        query = query.filter(Book.analysed == analysed)
+    
+    books = query.offset(skip).limit(limit).all()
+    return books
+
 #This gets book from gutendex by its book ID
 @router.post("/import-from-gutendex/{gutenberg_id}", response_model=BookResponse)
 async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get_db)):
@@ -129,7 +113,7 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
     84 - Frankenstein
     """
     try:
-        #Get book metadata
+        #Gets book metadata
         book_data = await gutendex_service.get_book_by_id(gutenberg_id)
         
         if not book_data:
@@ -138,7 +122,7 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
                 detail=f"Book with Gutenberg ID {gutenberg_id} not found"
             )
         
-        #Check if already in database
+        #Check if it is already in te database
         title = book_data["title"]
         author = book_data["author"]
         cover_url = book_data.get("cover_url")
@@ -155,7 +139,7 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
                 db.refresh(existing_book)
             return existing_book
         
-        #Create new book entry
+        #Create a new book entry
         new_book = Book(
             title=title,
             author=author,
@@ -179,25 +163,6 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
             detail=f"Failed to import book: {str(e)}"
         )
 
-@router.get("/", response_model=List[BookResponse])
-def get_books(
-    skip: int = 0, 
-    limit: int = 100,
-    author: Optional[str] = None,
-    analysed: Optional[bool] = None,
-    db: Session = Depends(get_db)
-):
-    query = db.query(Book)
-    
-    if author:
-        query = query.filter(Book.author.ilike(f"%{author}%"))
-    
-    if analysed is not None:
-        query = query.filter(Book.analysed == analysed)
-    
-    books = query.offset(skip).limit(limit).all()
-    return books
-
 @router.get("/{book_id}", response_model=BookResponse)
 def get_book(book_id: UUID, db: Session = Depends(get_db)):
     book = db.query(Book).filter(Book.book_id == book_id).first()
@@ -210,7 +175,6 @@ def get_book(book_id: UUID, db: Session = Depends(get_db)):
     
     return book
 
-#This imports the book metadata from 
 @router.put("/{book_id}", response_model=BookResponse)
 def update_book(book_id: UUID, book_update: BookUpdate, db: Session = Depends(get_db)):
     book = db.query(Book).filter(Book.book_id == book_id).first()
@@ -245,35 +209,3 @@ def delete_book(book_id: UUID, db: Session = Depends(get_db)):
     db.commit()
     
     return None
-
-@router.get("/analysed", response_model=List[dict])
-def get_analysed_books(limit: int = 10, db: Session = Depends(get_db)):
-    """
-    Get books that have been analysed with their stylometric profiles
-    """
-    #It will query books that are analysed and have profiles
-    books = db.query(Book).filter(Book.analysed == True).limit(limit).all()
-    
-    result = []
-    for book in books:
-        #This gets the stylometric profile
-        profile = db.query(StylometricProfile).filter(
-            StylometricProfile.book_id == book.book_id
-        ).first()
-        
-        if profile:
-            result.append({
-                "book_id": str(book.book_id),
-                "title": book.title,
-                "author": book.author,
-                "publication_year": book.publication_year,
-                "analysed": book.analysed,
-                "pacing_score": float(profile.pacing_score) if profile.pacing_score else None,
-                "tone_score": float(profile.tone_score) if profile.tone_score else None,
-                "vocabulary_richness": float(profile.vocabulary_richness) if profile.vocabulary_richness else None,
-                "avg_sentence_length": float(profile.avg_sentence_length) if profile.avg_sentence_length else None,
-                "avg_word_length": float(profile.avg_word_length) if profile.avg_word_length else None,
-                "lexical_diversity": float(profile.lexical_diversity) if profile.lexical_diversity else None
-            })
-    
-    return result
