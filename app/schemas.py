@@ -51,7 +51,7 @@ class BookUpdate(BaseModel):
 class BookResponse(BookBase):
     book_id: UUID
     created_at: datetime
-    analyzed: bool
+    analysed: bool
     summary: Optional[str] = None
     text_source: Optional[str] = None
     cover_url: Optional[str] = None
