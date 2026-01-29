@@ -15,6 +15,7 @@ router = APIRouter(prefix="/books", tags=["books"])
 
 
 @router.get("/bookshelf", response_model=List[BookResponse])
+@router.get("/analyzed", response_model=List[BookResponse])
 def get_bookshelf_books(limit: int = 10, db: Session = Depends(get_db)):
     """
     Get books with summaries to display in the bookshelf
