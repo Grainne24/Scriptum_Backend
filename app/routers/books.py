@@ -15,6 +15,7 @@ router = APIRouter(prefix="/books", tags=["books"])
 
 
 @router.get("/analysed", response_model=List[BookResponse])
+@router.get("/analyzed", response_model=List[BookResponse])
 def get_analysed_books(limit: int = 10, db: Session = Depends(get_db)):
     """
     Get books that have been analysed with their stylometric profiles
