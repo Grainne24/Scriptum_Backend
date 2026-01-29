@@ -14,45 +14,46 @@ from app.services.gutendex_service import gutendex_service
 router = APIRouter(prefix="/books", tags=["books"])
 
 
-@router.get("/analysed", response_model=List[BookResponse])
-@router.get("/analyzed", response_model=List[BookResponse])
-def get_analysed_books(limit: int = 10, db: Session = Depends(get_db)):
+@router.get("/bookshelf", response_model=List[BookResponse])
+def get_bookshelf_books(limit: int = 10, db: Session = Depends(get_db)):
     """
-    Get books that have been analysed with their stylometric profiles
+    Get books with summaries to display in the bookshelf
     """
     try:
-        books = db.query(Book).filter(Book.analysed == True).limit(limit).all()
+        #Get books that have summaries (whether analysed or not)
+        books = db.query(Book).filter(Book.summary.isnot(None)).limit(limit).all()
         
         result = []
         for book in books:
+            #Try to get stylometric profile if it exists
             profile = db.query(StylometricProfile).filter(
                 StylometricProfile.book_id == book.book_id
             ).first()
             
-            if profile:
-                result.append({
-                    "book_id": book.book_id,
-                    "title": book.title,
-                    "author": book.author,
-                    "publication_year": book.publication_year,
-                    "created_at": book.created_at,
-                    "analysed": book.analysed,
-                    "cover_url": book.cover_url,
-                    "summary": book.summary,
-                    "text_source": book.text_source,
-                    "pacing_score": float(profile.pacing_score) if profile.pacing_score else None,
-                    "tone_score": float(profile.tone_score) if profile.tone_score else None,
-                    "vocabulary_richness": float(profile.vocabulary_richness) if profile.vocabulary_richness else None,
-                    "avg_sentence_length": float(profile.avg_sentence_length) if profile.avg_sentence_length else None,
-                    "avg_word_length": float(profile.avg_word_length) if profile.avg_word_length else None,
-                    "lexical_diversity": float(profile.lexical_diversity) if profile.lexical_diversity else None
-                })
+            result.append({
+                "book_id": book.book_id,
+                "title": book.title,
+                "author": book.author,
+                "publication_year": book.publication_year,
+                "created_at": book.created_at,
+                "analysed": book.analysed,
+                "cover_url": book.cover_url,
+                "summary": book.summary,
+                "text_source": book.text_source,
+                #Include profile data if available, otherwise None
+                "pacing_score": float(profile.pacing_score) if profile and profile.pacing_score else None,
+                "tone_score": float(profile.tone_score) if profile and profile.tone_score else None,
+                "vocabulary_richness": float(profile.vocabulary_richness) if profile and profile.vocabulary_richness else None,
+                "avg_sentence_length": float(profile.avg_sentence_length) if profile and profile.avg_sentence_length else None,
+                "avg_word_length": float(profile.avg_word_length) if profile and profile.avg_word_length else None,
+                "lexical_diversity": float(profile.lexical_diversity) if profile and profile.lexical_diversity else None
+            })
         
-        print(f"Returning {len(result)} analysed books")
+        print(f"Returning {len(result)} bookshelf books")
         return result
         
     except Exception as e:
-        print(f"Error fetching analysed books: {str(e)}")
+        print(f"Error fetching bookshelf books: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch books: {str(e)}"
