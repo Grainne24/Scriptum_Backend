@@ -7,26 +7,34 @@ from typing import List, Optional
 from uuid import UUID
 
 from app.database import get_db
-from app.models import Book, StylometricProfile
+from app.models import Book, StylometricProfile, UserBookshelf  # ADD UserBookshelf
 from app.schemas import BookCreate, BookResponse, BookUpdate
 from app.services.gutendex_service import gutendex_service
 
 router = APIRouter(prefix="/books", tags=["books"])
 
+'''
+    This holds all the users information in their personal bookshelf - this will hold the saved and favorited books in the bookshelf
+'''
 
-@router.get("/bookshelf", response_model=List[BookResponse])
-@router.get("/analyzed", response_model=List[BookResponse])
-def get_bookshelf_books(limit: int = 10, db: Session = Depends(get_db)):
-    """
-    Get books with summaries to display in the bookshelf
-    """
+@router.get("/user-bookshelf", response_model=List[BookResponse])
+def get_my_bookshelf(
+    user_id: str, 
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
     try:
-        #Get books that have summaries (whether analysed or not)
-        books = db.query(Book).filter(Book.summary.isnot(None)).limit(limit).all()
+        user_uuid = UUID(user_id)
+        
+        #This joins books with user_bookshelf table to get only user's saved books
+        books = db.query(Book).join(
+            UserBookshelf, Book.book_id == UserBookshelf.book_id
+        ).filter(
+            UserBookshelf.user_id == user_uuid
+        ).limit(limit).all()
         
         result = []
         for book in books:
-            #Try to get stylometric profile if it exists
             profile = db.query(StylometricProfile).filter(
                 StylometricProfile.book_id == book.book_id
             ).first()
@@ -37,11 +45,10 @@ def get_bookshelf_books(limit: int = 10, db: Session = Depends(get_db)):
                 "author": book.author,
                 "publication_year": book.publication_year,
                 "created_at": book.created_at,
-                "analysed": book.analysed,
+                "analysed": book.analysed if book.analysed is not None else False,
                 "cover_url": book.cover_url,
                 "summary": book.summary,
                 "text_source": book.text_source,
-                #Include profile data if available, otherwise None
                 "pacing_score": float(profile.pacing_score) if profile and profile.pacing_score else None,
                 "tone_score": float(profile.tone_score) if profile and profile.tone_score else None,
                 "vocabulary_richness": float(profile.vocabulary_richness) if profile and profile.vocabulary_richness else None,
@@ -50,7 +57,187 @@ def get_bookshelf_books(limit: int = 10, db: Session = Depends(get_db)):
                 "lexical_diversity": float(profile.lexical_diversity) if profile and profile.lexical_diversity else None
             })
         
-        print(f"Returning {len(result)} bookshelf books")
+        print(f"Returning {len(result)} books from user's bookshelf")
+        return result
+        
+    except Exception as e:
+        print(f"Error fetching user bookshelf: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch bookshelf: {str(e)}"
+        )
+
+@router.post("/my-bookshelf/{book_id}")
+def add_to_bookshelf(
+    book_id: UUID,
+    user_id: str, 
+    db: Session = Depends(get_db)
+):
+    """
+    Add a book to user's personal bookshelf (the "Add to Favorites" button)
+    """
+    try:
+        user_uuid = UUID(user_id)
+        
+        #Check if its already in the bookshelf
+        existing = db.query(UserBookshelf).filter(
+            UserBookshelf.user_id == user_uuid,
+            UserBookshelf.book_id == book_id
+        ).first()
+        
+        if existing:
+            return {"message": "Book already in bookshelf"}
+        
+        #Verify the book exists
+        book = db.query(Book).filter(Book.book_id == book_id).first()
+        if not book:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Book not found"
+            )
+        
+        #Add to the bookshelf
+        bookshelf_entry = UserBookshelf(
+            user_id=user_uuid,
+            book_id=book_id
+        )
+        
+        db.add(bookshelf_entry)
+        db.commit()
+        
+        return {"message": "Book added to bookshelf successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to add book: {str(e)}"
+        )
+
+@router.delete("/my-bookshelf/{book_id}")
+def remove_from_bookshelf(
+    book_id: UUID,
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    try:
+        user_uuid = UUID(user_id)
+        
+        bookshelf_entry = db.query(UserBookshelf).filter(
+            UserBookshelf.user_id == user_uuid,
+            UserBookshelf.book_id == book_id
+        ).first()
+        
+        if not bookshelf_entry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Book not in bookshelf"
+            )
+        
+        db.delete(bookshelf_entry)
+        db.commit()
+        
+        return {"message": "Book removed from bookshelf"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to remove book: {str(e)}"
+        )
+
+'''
+    This is used for the search page and searched all the books in the database
+'''
+@router.get("/search", response_model=List[BookResponse])
+def search_all_books(
+    query: Optional[str] = None,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    try:
+        #First start with books that have summaries
+        books_query = db.query(Book).filter(Book.summary.isnot(None))
+        
+        #Then if the user typed a search query, filter by title or author
+        if query:
+            books_query = books_query.filter(
+                (Book.title.ilike(f"%{query}%")) | 
+                (Book.author.ilike(f"%{query}%"))
+            )
+        
+        books = books_query.limit(limit).all()
+        
+        result = []
+        for book in books:
+            profile = db.query(StylometricProfile).filter(
+                StylometricProfile.book_id == book.book_id
+            ).first()
+            
+            result.append({
+                "book_id": book.book_id,
+                "title": book.title,
+                "author": book.author,
+                "publication_year": book.publication_year,
+                "created_at": book.created_at,
+                "analysed": book.analysed if book.analysed is not None else False,
+                "cover_url": book.cover_url,
+                "summary": book.summary,
+                "text_source": book.text_source,
+                "pacing_score": float(profile.pacing_score) if profile and profile.pacing_score else None,
+                "tone_score": float(profile.tone_score) if profile and profile.tone_score else None,
+                "vocabulary_richness": float(profile.vocabulary_richness) if profile and profile.vocabulary_richness else None,
+                "avg_sentence_length": float(profile.avg_sentence_length) if profile and profile.avg_sentence_length else None,
+                "avg_word_length": float(profile.avg_word_length) if profile and profile.avg_word_length else None,
+                "lexical_diversity": float(profile.lexical_diversity) if profile and profile.lexical_diversity else None
+            })
+        
+        print(f"Search returned {len(result)} books")
+        return result
+        
+    except Exception as e:
+        print(f"Error searching books: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to search books: {str(e)}"
+        )
+'''
+    This is kept for a testing
+'''
+@router.get("/bookshelf", response_model=List[BookResponse])
+@router.get("/analyzed", response_model=List[BookResponse])
+def get_bookshelf_books(limit: int = 10, db: Session = Depends(get_db)):
+    try:
+        books = db.query(Book).filter(Book.summary.isnot(None)).limit(limit).all()
+        
+        result = []
+        for book in books:
+            profile = db.query(StylometricProfile).filter(
+                StylometricProfile.book_id == book.book_id
+            ).first()
+            
+            result.append({
+                "book_id": book.book_id,
+                "title": book.title,
+                "author": book.author,
+                "publication_year": book.publication_year,
+                "created_at": book.created_at,
+                "analysed": book.analysed if book.analysed is not None else False,
+                "cover_url": book.cover_url,
+                "summary": book.summary,
+                "text_source": book.text_source,
+                "pacing_score": float(profile.pacing_score) if profile and profile.pacing_score else None,
+                "tone_score": float(profile.tone_score) if profile and profile.tone_score else None,
+                "vocabulary_richness": float(profile.vocabulary_richness) if profile and profile.vocabulary_richness else None,
+                "avg_sentence_length": float(profile.avg_sentence_length) if profile and profile.avg_sentence_length else None,
+                "avg_word_length": float(profile.avg_word_length) if profile and profile.avg_word_length else None,
+                "lexical_diversity": float(profile.lexical_diversity) if profile and profile.lexical_diversity else None
+            })
+        
         return result
         
     except Exception as e:
@@ -59,8 +246,10 @@ def get_bookshelf_books(limit: int = 10, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch books: {str(e)}"
         )
-
-#This searches gutenberg for a book which a user inputs the name of
+    
+'''
+    This searches through gutendex for results
+'''
 @router.get("/search-gutendex")
 async def search_gutendex(
     query: Optional[str] = None,
@@ -107,7 +296,6 @@ def get_books(
     books = query.offset(skip).limit(limit).all()
     return books
 
-#This gets book from gutendex by its book ID
 @router.post("/import-from-gutendex/{gutenberg_id}", response_model=BookResponse)
 async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get_db)):
     """
@@ -116,7 +304,6 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
     84 - Frankenstein
     """
     try:
-        #Gets book metadata
         book_data = await gutendex_service.get_book_by_id(gutenberg_id)
         
         if not book_data:
@@ -125,7 +312,6 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
                 detail=f"Book with Gutenberg ID {gutenberg_id} not found"
             )
         
-        #Check if it is already in te database
         title = book_data["title"]
         author = book_data["author"]
         cover_url = book_data.get("cover_url")
@@ -142,7 +328,6 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
                 db.refresh(existing_book)
             return existing_book
         
-        #Create a new book entry
         new_book = Book(
             title=title,
             author=author,
@@ -188,7 +373,6 @@ def update_book(book_id: UUID, book_update: BookUpdate, db: Session = Depends(ge
             detail="Book not found"
         )
     
-    #Update only provided fields
     update_data = book_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(book, key, value)

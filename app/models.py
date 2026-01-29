@@ -48,6 +48,14 @@ class Book(Base):
     ratings = relationship("Rating", back_populates="book", cascade="all, delete-orphan")
     recommendations = relationship("Recommendation", back_populates="book", cascade="all, delete-orphan")
 
+#User Book table
+class UserBookshelf(Base):
+    __tablename__ = "user_bookshelf"
+    
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True)
+    book_id = Column(UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="CASCADE"), primary_key=True)
+    added_at = Column(TIMESTAMP, server_default=func.now())
+
 #Stylometric profile table
 class StylometricProfile(Base):
     __tablename__ = "stylometric_profiles"
