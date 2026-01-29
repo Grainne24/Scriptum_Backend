@@ -66,7 +66,7 @@ class StylometricProfile(Base):
     total_sentences = Column(Integer, nullable=True)
     unique_words = Column(Integer, nullable=True)
     analysis_version = Column(String(20), nullable=True)
-    analyzed_at = Column(TIMESTAMP, server_default=func.now())
+    analysed_at = Column(TIMESTAMP, server_default=func.now())
     
     #Relationships
     book = relationship("Book", back_populates="stylometric_profile")
