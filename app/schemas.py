@@ -55,6 +55,7 @@ class BookResponse(BookBase):
     summary: Optional[str] = None
     text_source: Optional[str] = None
     cover_url: Optional[str] = None
+    book_status: Optional[str] = None
     pacing_score: Optional[float] = None
     tone_score: Optional[float] = None
     vocabulary_richness: Optional[float] = None

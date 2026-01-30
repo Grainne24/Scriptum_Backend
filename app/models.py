@@ -55,6 +55,7 @@ class UserBookshelf(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True)
     book_id = Column(UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="CASCADE"), primary_key=True)
     added_at = Column(TIMESTAMP, server_default=func.now())
+    book_status = Column(String(50), default='want_to_read')
 
 #Stylometric profile table
 class StylometricProfile(Base):

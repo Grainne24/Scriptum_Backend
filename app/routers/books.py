@@ -7,7 +7,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from app.database import get_db
-from app.models import Book, StylometricProfile, UserBookshelf  # ADD UserBookshelf
+from app.models import Book, StylometricProfile, UserBookshelf
 from app.schemas import BookCreate, BookResponse, BookUpdate
 from app.services.gutendex_service import gutendex_service
 
@@ -27,14 +27,14 @@ def get_my_bookshelf(
         user_uuid = UUID(user_id)
         
         #This joins books with user_bookshelf table to get only user's saved books
-        books = db.query(Book).join(
+        books = db.query(Book, UserBookshelf).join(
             UserBookshelf, Book.book_id == UserBookshelf.book_id
         ).filter(
             UserBookshelf.user_id == user_uuid
         ).limit(limit).all()
         
         result = []
-        for book in books:
+        for book, bookshelf_entry in books:
             profile = db.query(StylometricProfile).filter(
                 StylometricProfile.book_id == book.book_id
             ).first()
@@ -49,6 +49,7 @@ def get_my_bookshelf(
                 "cover_url": book.cover_url,
                 "summary": book.summary,
                 "text_source": book.text_source,
+                "book_status": bookshelf_entry.book_status,
                 "pacing_score": float(profile.pacing_score) if profile and profile.pacing_score else None,
                 "tone_score": float(profile.tone_score) if profile and profile.tone_score else None,
                 "vocabulary_richness": float(profile.vocabulary_richness) if profile and profile.vocabulary_richness else None,
@@ -71,6 +72,7 @@ def get_my_bookshelf(
 def add_to_bookshelf(
     book_id: UUID,
     user_id: str, 
+    book_status: str = "want_to_read",
     db: Session = Depends(get_db)
 ):
     """
@@ -86,7 +88,9 @@ def add_to_bookshelf(
         ).first()
         
         if existing:
-            return {"message": "Book already in bookshelf"}
+            existing.book_status = book_status
+            db.commit()
+            return {"message": "Book status updated"}
         
         #Verify the book exists
         book = db.query(Book).filter(Book.book_id == book_id).first()
@@ -99,7 +103,8 @@ def add_to_bookshelf(
         #Add to the bookshelf
         bookshelf_entry = UserBookshelf(
             user_id=user_uuid,
-            book_id=book_id
+            book_id=book_id,
+            book_status=book_status
         )
         
         db.add(bookshelf_entry)
@@ -114,6 +119,40 @@ def add_to_bookshelf(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to add book: {str(e)}"
+        )
+    
+@router.put("/my-bookshelf/{book_id}/status")
+def update_book_status(
+    book_id: UUID,
+    user_id: str,
+    book_status: str,
+    db: Session = Depends(get_db)
+):
+    try:
+        user_uuid = UUID(user_id)
+        
+        bookshelf_entry = db.query(UserBookshelf).filter(
+            UserBookshelf.user_id == user_uuid,
+            UserBookshelf.book_id == book_id
+        ).first()
+        
+        if not bookshelf_entry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Book not in bookshelf"
+            )
+        bookshelf_entry.book_status = book_status
+        db.commit()
+        
+        return {"message": f"Book status updated to {book_status}"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update status: {str(e)}"
         )
 
 @router.delete("/my-bookshelf/{book_id}")
@@ -206,7 +245,7 @@ def search_all_books(
             detail=f"Failed to search books: {str(e)}"
         )
 '''
-    This is kept for a testing
+    This is kept for testing
 '''
 @router.get("/bookshelf", response_model=List[BookResponse])
 @router.get("/analyzed", response_model=List[BookResponse])
