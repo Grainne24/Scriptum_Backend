@@ -50,6 +50,9 @@ def get_my_bookshelf(
                 "summary": book.summary,
                 "text_source": book.text_source,
                 "book_status": bookshelf_entry.book_status,
+                "comments": bookshelf_entry.comments,
+                "date_started": bookshelf_entry.date_started,
+                "date_ended": bookshelf_entry.date_ended,
                 "pacing_score": float(profile.pacing_score) if profile and profile.pacing_score else None,
                 "tone_score": float(profile.tone_score) if profile and profile.tone_score else None,
                 "vocabulary_richness": float(profile.vocabulary_richness) if profile and profile.vocabulary_richness else None,
@@ -73,11 +76,11 @@ def add_to_bookshelf(
     book_id: UUID,
     user_id: str, 
     book_status: str = "want_to_read",
+    comments: Optional[str] = None,
+    date_started: Optional[date] = None,
+    date_ended: Optional[date] = None,
     db: Session = Depends(get_db)
 ):
-    """
-    Add a book to user's personal bookshelf (the "Add to Favorites" button)
-    """
     try:
         user_uuid = UUID(user_id)
         
@@ -89,6 +92,9 @@ def add_to_bookshelf(
         
         if existing:
             existing.book_status = book_status
+            existing.comments = comments
+            existing.date_started = date_started
+            existing.date_ended = date_ended
             db.commit()
             return {"message": "Book status updated"}
         
@@ -104,7 +110,10 @@ def add_to_bookshelf(
         bookshelf_entry = UserBookshelf(
             user_id=user_uuid,
             book_id=book_id,
-            book_status=book_status
+            book_status=book_status,
+            comments=comments,
+            date_started=date_started,
+            date_ended=date_ended
         )
         
         db.add(bookshelf_entry)
@@ -119,6 +128,51 @@ def add_to_bookshelf(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to add book: {str(e)}"
+        )
+    
+@router.put("/my-bookshelf/{book_id}")
+def update_bookshelf_entry(
+    book_id: UUID,
+    user_id: str,
+    update_data: UserBookshelfUpdate,
+    db: Session = Depends(get_db)
+):
+    try:
+        user_uuid = UUID(user_id)
+        
+        bookshelf_entry = db.query(UserBookshelf).filter(
+            UserBookshelf.user_id == user_uuid,
+            UserBookshelf.book_id == book_id
+        ).first()
+        
+        if not bookshelf_entry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Book not in bookshelf"
+            )
+        
+        update_dict = update_data.model_dump(exclude_unset=True)
+        for key, value in update_dict.items():
+            setattr(bookshelf_entry, key, value)
+        
+        db.commit()
+        db.refresh(bookshelf_entry)
+        
+        return {
+            "message": "Bookshelf entry updated successfully",
+            "book_status": bookshelf_entry.book_status,
+            "comments": bookshelf_entry.comments,
+            "date_started": bookshelf_entry.date_started,
+            "date_ended": bookshelf_entry.date_ended
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update bookshelf entry: {str(e)}"
         )
     
 @router.put("/my-bookshelf/{book_id}/status")

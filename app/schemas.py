@@ -84,3 +84,26 @@ class RatingResponse(BaseModel):
 #Error response
 class ErrorResponse(BaseModel):
     detail: str
+
+class UserBookshelfCreate(BaseModel):
+    book_id: UUID
+    reading_status: Optional[str] = Field(None, max_length=50)
+    comments: Optional[str] = None
+    date_started: Optional[date] = None
+    date_ended: Optional[date] = None
+
+class UserBookshelfUpdate(BaseModel):
+    reading_status: Optional[str] = Field(None, max_length=50)
+    comments: Optional[str] = None
+    date_started: Optional[date] = None
+    date_ended: Optional[date] = None
+
+class UserBookshelfResponse(BaseModel):
+    bookshelf_id: UUID
+    user_id: UUID
+    book_id: UUID
+    reading_status: Optional[str] = None
+    comments: Optional[str] = None
+    date_started: Optional[date] = None
+    date_ended: Optional[date] = None
+    added_at: datetime
