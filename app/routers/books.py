@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
+from datetime import date
 
 from app.database import get_db
 from app.models import Book, StylometricProfile, UserBookshelf
@@ -69,6 +70,66 @@ def get_my_bookshelf(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch bookshelf: {str(e)}"
+        )
+    
+@router.get("/my-bookshelf/{book_id}", response_model=BookResponse)
+def get_bookshelf_book_details(
+    book_id: UUID,
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    try:
+        user_uuid = UUID(user_id)
+        
+        # Join to get both book and bookshelf data
+        result = db.query(Book, UserBookshelf).join(
+            UserBookshelf, Book.book_id == UserBookshelf.book_id
+        ).filter(
+            UserBookshelf.user_id == user_uuid,
+            UserBookshelf.book_id == book_id
+        ).first()
+        
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Book not found in your bookshelf"
+            )
+        
+        book, bookshelf_entry = result
+        
+        profile = db.query(StylometricProfile).filter(
+            StylometricProfile.book_id == book.book_id
+        ).first()
+        
+        return {
+            "book_id": book.book_id,
+            "title": book.title,
+            "author": book.author,
+            "publication_year": book.publication_year,
+            "created_at": book.created_at,
+            "analysed": book.analysed if book.analysed is not None else False,
+            "cover_url": book.cover_url,
+            "summary": book.summary,
+            "text_source": book.text_source,
+            "book_status": bookshelf_entry.book_status,
+            "comments": bookshelf_entry.comments,
+            "date_started": bookshelf_entry.date_started,
+            "date_ended": bookshelf_entry.date_ended,
+            "pacing_score": float(profile.pacing_score) if profile and profile.pacing_score else None,
+            "tone_score": float(profile.tone_score) if profile and profile.tone_score else None,
+            "vocabulary_richness": float(profile.vocabulary_richness) if profile and profile.vocabulary_richness else None,
+            "avg_sentence_length": float(profile.avg_sentence_length) if profile and profile.avg_sentence_length else None,
+            "avg_word_length": float(profile.avg_word_length) if profile and profile.avg_word_length else None,
+            "lexical_diversity": float(profile.lexical_diversity) if profile and profile.lexical_diversity else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching bookshelf book details: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch book details: {str(e)}"
         )
 
 @router.post("/my-bookshelf/{book_id}")

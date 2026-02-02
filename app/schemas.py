@@ -5,6 +5,7 @@ from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
+from datetime import date
 
 #Login request
 class UserLogin(BaseModel):
@@ -93,7 +94,7 @@ class UserBookshelfCreate(BaseModel):
     date_ended: Optional[date] = None
 
 class UserBookshelfUpdate(BaseModel):
-    reading_status: Optional[str] = Field(None, max_length=50)
+    book_status: Optional[str] = None
     comments: Optional[str] = None
     date_started: Optional[date] = None
     date_ended: Optional[date] = None
