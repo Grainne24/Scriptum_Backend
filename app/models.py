@@ -2,13 +2,13 @@
     This file defines what the database looks like in PostgreSQL and converts it to Python also known as ORM(Object Relational Mapping)
 '''
 
-from sqlalchemy import Column, String, Integer, Boolean, TIMESTAMP, DECIMAL, Text, ForeignKey
+from sqlalchemy import Column, String, Integer, Boolean, TIMESTAMP, DECIMAL, Text, ForeignKey, Date
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import uuid
 from app.database import Base
-from datetime import date
+from datetime import datetime
 
 #User table
 class User(Base):
