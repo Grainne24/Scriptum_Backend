@@ -8,8 +8,8 @@ from uuid import UUID
 from datetime import date
 
 from app.database import get_db
-from app.models import Book, StylometricProfile, UserBookshelf
-from app.schemas import BookCreate, BookResponse, BookUpdate
+from app.models import Book, StylometricProfile, UserBookshelf, UserBookshelfUpdate
+from app.schemas import BookResponse, BookUpdate
 from app.services.gutendex_service import gutendex_service
 
 router = APIRouter(prefix="/books", tags=["books"])
