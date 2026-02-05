@@ -7,9 +7,9 @@ import os
 from typing import Dict, Optional
 import re
 
-class StylometryAnalyzer:
+class StylometryAnalyser:
     
-    def analyze_text(self, text: str) -> Dict[str, float]:
+    def analyse_text(self, text: str) -> Dict[str, float]:
         if not text or len(text.strip()) == 0:
             raise ValueError("Text cannot be empty")
         
@@ -73,4 +73,4 @@ class StylometryAnalyzer:
         return [s.strip() for s in sentences if s.strip()]
 
 #Creates singleton instance
-stylometry_analyzer = StylometryAnalyzer()
+stylometry_analyser = StylometryAnalyser()

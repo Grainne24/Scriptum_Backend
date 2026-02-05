@@ -25,10 +25,10 @@ def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
     print(f"Login attempt for: {login_data.email}")
     
     try:
-        # Hash the provided password
+        #Hash the provided password
         password_hash = hash_password(login_data.password)
         
-        # Find user by email or username
+        #Find user by email or username
         user = db.query(User).filter(
             ((User.email == login_data.email) | (User.username == login_data.email)) &
             (User.password_hash == password_hash)
@@ -41,7 +41,7 @@ def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
                 detail="Invalid email/username or password"
             )
         
-        # Update last login time
+        #Update last login time
         user.last_login = datetime.now()
         db.commit()
         
@@ -74,7 +74,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
                 detail="User with this email or username already exists"
             )
         
-        # Create new user
+        #Create a new user
         print(f"Creating new user...")
         db_user = User(
             email=user.email,

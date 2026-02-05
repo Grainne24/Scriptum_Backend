@@ -1,7 +1,7 @@
 '''
     This file includes the book end points for managing and importing books and the Gutendex integration - it searches through Project Gutenberg
 '''
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models import Book, StylometricProfile, UserBookshelf
 from app.schemas import BookCreate, BookResponse, BookUpdate, UserBookshelfUpdate
 from app.services.gutendex_service import gutendex_service
+from app.services.stylometry_service import stylometry_analyser
 
 router = APIRouter(prefix="/books", tags=["books"])
 
@@ -131,21 +132,90 @@ def get_bookshelf_book_details(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch book details: {str(e)}"
         )
+    
+async def analyse_book_background(book_id: UUID, db_session_maker):
+    db = db_session_maker()
+    try:
+        #First check if it has already been analysed
+        existing_profile = db.query(StylometricProfile).filter(
+            StylometricProfile.book_id == book_id
+        ).first()
+        
+        if existing_profile:
+            print(f"Book {book_id} already analysed, skipping")
+            return
+        
+        #Get all of the book details
+        book = db.query(Book).filter(Book.book_id == book_id).first()
+        if not book or not book.text_file_path:
+            print(f"Book {book_id} not found or no text path")
+            return
+        
+        #Only analyse Gutenberg books (so it is able to fetch the text content)
+        if "gutenberg_" not in book.text_file_path:
+            print(f"Book {book_id} is not from Gutenberg, skipping analysis")
+            return
+        
+        #Extract the Gutenberg ID
+        gutenberg_id = int(book.text_file_path.replace("gutenberg_", ""))
+        print(f"Starting background analysis for book {book_id} (Gutenberg {gutenberg_id})")
+        
+        #Fetch the text from Gutenberg
+        text = await gutendex_service.get_book_text(gutenberg_id)
+        if not text:
+            print(f"Could not fetch text for Gutenberg ID {gutenberg_id}")
+            return
+        
+        #Analyse the text
+        analysis_results = stylometry_analyser.analyse_text(text)
+        
+        #Then it will create the stylometric profile
+        profile = StylometricProfile(
+            book_id=book_id,
+            pacing_score=analysis_results["pacing_score"],
+            tone_score=analysis_results["tone_score"],
+            vocabulary_richness=analysis_results["vocabulary_richness"],
+            avg_sentence_length=analysis_results["avg_sentence_length"],
+            avg_word_length=analysis_results["avg_word_length"],
+            lexical_diversity=analysis_results["lexical_diversity"],
+            total_words=analysis_results["total_words"],
+            total_sentences=analysis_results["total_sentences"],
+            unique_words=analysis_results["unique_words"],
+            analysis_version="1.0"
+        )
+        
+        if hasattr(StylometricProfile, 'punctuation_density'):
+            profile.punctuation_density = analysis_results.get("punctuation_density")
+        if hasattr(StylometricProfile, 'dialogue_percentage'):
+            profile.dialogue_percentage = analysis_results.get("dialogue_percentage")
+        
+        db.add(profile)
+        book.analysed = True
+        db.commit()
+        
+        print(f"Successfully analysed book {book_id}")
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Background analysis failed for book {book_id}: {str(e)}")
+    finally:
+        db.close()
 
 @router.post("/my-bookshelf/{book_id}")
-def add_to_bookshelf(
+async def add_to_bookshelf(
     book_id: UUID,
     user_id: str, 
     book_status: str = "want_to_read",
     comments: Optional[str] = None,
     date_started: Optional[date] = None,
     date_ended: Optional[date] = None,
+    background_tasks: BackgroundTasks = None,  # Add this parameter
     db: Session = Depends(get_db)
 ):
     try:
         user_uuid = UUID(user_id)
         
-        #Check if its already in the bookshelf
+        #Check if it's already in the bookshelf
         existing = db.query(UserBookshelf).filter(
             UserBookshelf.user_id == user_uuid,
             UserBookshelf.book_id == book_id
@@ -159,7 +229,7 @@ def add_to_bookshelf(
             db.commit()
             return {"message": "Book status updated"}
         
-        #Verify the book exists
+        #Verify the book already exists
         book = db.query(Book).filter(Book.book_id == book_id).first()
         if not book:
             raise HTTPException(
@@ -167,7 +237,7 @@ def add_to_bookshelf(
                 detail="Book not found"
             )
         
-        #Add to the bookshelf
+        #Add the book to the bookshelf
         bookshelf_entry = UserBookshelf(
             user_id=user_uuid,
             book_id=book_id,
@@ -180,7 +250,26 @@ def add_to_bookshelf(
         db.add(bookshelf_entry)
         db.commit()
         
-        return {"message": "Book added to bookshelf successfully"}
+        #Trigger the background analysis if the book hasn't been analysed yet
+        if background_tasks:
+            existing_profile = db.query(StylometricProfile).filter(
+                StylometricProfile.book_id == book_id
+            ).first()
+            
+            if not existing_profile:
+                background_tasks.add_task(
+                    analyse_book_background, 
+                    book_id, 
+                    get_db
+                )
+                print(f"Queued background analysis for book {book_id}")
+        
+        return {
+            "message": "Book added to bookshelf successfully",
+            "analysis_queued": not bool(db.query(StylometricProfile).filter(
+                StylometricProfile.book_id == book_id
+            ).first())
+        }
         
     except HTTPException:
         raise
@@ -363,7 +452,7 @@ def search_all_books(
     This is kept for testing
 '''
 @router.get("/bookshelf", response_model=List[BookResponse])
-@router.get("/analyzed", response_model=List[BookResponse])
+@router.get("/analysed", response_model=List[BookResponse])
 def get_bookshelf_books(limit: int = 10, db: Session = Depends(get_db)):
     try:
         books = db.query(Book).filter(Book.summary.isnot(None)).limit(limit).all()
