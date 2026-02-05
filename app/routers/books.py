@@ -7,7 +7,7 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import date
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models import Book, StylometricProfile, UserBookshelf
 from app.schemas import BookCreate, BookResponse, BookUpdate, UserBookshelfUpdate
 from app.services.gutendex_service import gutendex_service
@@ -134,7 +134,7 @@ def get_bookshelf_book_details(
         )
     
 async def analyse_book_background(book_id: UUID, db_session_maker):
-    db = db_session_maker()
+    db = SessionLocal()
     try:
         #First check if it has already been analysed
         existing_profile = db.query(StylometricProfile).filter(
@@ -209,7 +209,7 @@ async def add_to_bookshelf(
     comments: Optional[str] = None,
     date_started: Optional[date] = None,
     date_ended: Optional[date] = None,
-    background_tasks: BackgroundTasks = None,  # Add this parameter
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db)
 ):
     try:
@@ -259,8 +259,7 @@ async def add_to_bookshelf(
             if not existing_profile:
                 background_tasks.add_task(
                     analyse_book_background, 
-                    book_id, 
-                    get_db
+                    book_id
                 )
                 print(f"Queued background analysis for book {book_id}")
         
