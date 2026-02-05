@@ -133,7 +133,7 @@ def get_bookshelf_book_details(
             detail=f"Failed to fetch book details: {str(e)}"
         )
     
-async def analyse_book_background(book_id: UUID, db_session_maker):
+async def analyse_book_background(book_id: UUID):
     db = SessionLocal()
     try:
         #First check if it has already been analysed
