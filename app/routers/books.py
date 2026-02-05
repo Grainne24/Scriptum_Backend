@@ -151,11 +151,6 @@ async def analyse_book_background(book_id: UUID):
             print(f"Book {book_id} not found or no text path")
             return
         
-        #Only analyse Gutenberg books (so it is able to fetch the text content)
-        if "gutenberg_" not in book.text_file_path:
-            print(f"Book {book_id} is not from Gutenberg, skipping analysis")
-            return
-        
         #Extract the Gutenberg ID
         gutenberg_id = int(book.text_file_path.replace("gutenberg_", ""))
         print(f"Starting background analysis for book {book_id} (Gutenberg {gutenberg_id})")
