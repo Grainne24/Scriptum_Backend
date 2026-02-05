@@ -9,14 +9,14 @@ from uuid import UUID
 
 from app.database import get_db
 from app.models import Book, StylometricProfile
-from app.services.stylometry_service import stylometry_analyzer
+from app.services.stylometry_service import stylometry_analyser
 from app.services.gutendex_service import gutendex_service
 
 router = APIRouter(prefix="/stylometry", tags=["stylometry"])
 
 #This fetches the book text from gutenberg and analyses it
-@router.post("/analyze-from-gutenberg/{book_id}", response_model=dict)
-async def analyze_book_from_gutenberg(
+@router.post("/analyse-from-gutenberg/{book_id}", response_model=dict)
+async def analyse_book_from_gutenberg(
     book_id: UUID,
     db: Session = Depends(get_db)
 ):
@@ -65,7 +65,7 @@ async def analyze_book_from_gutenberg(
             )
         
         #Analyses the text
-        analysis_results = stylometry_analyzer.analyze_text(text)
+        analysis_results = stylometry_analyser.analyse_text(text)
         
         #Creates a stylometric profile
         profile = StylometricProfile(
@@ -113,8 +113,8 @@ async def analyze_book_from_gutenberg(
             detail=f"Analysis failed: {str(e)}"
         )
 #This analyses a book with its provided text
-@router.post("/analyze/{book_id}", response_model=dict)
-def analyze_book_with_text(
+@router.post("/analyse/{book_id}", response_model=dict)
+def analyse_book_with_text(
     book_id: UUID,
     text: str,
     db: Session = Depends(get_db)
@@ -139,8 +139,8 @@ def analyze_book_with_text(
         )
     
     try:
-        #Analysee the text
-        analysis_results = stylometry_analyzer.analyze_text(text)
+        #Analyse the text
+        analysis_results = stylometry_analyser.analyse_text(text)
         
         #Creates a stylometric profile
         profile = StylometricProfile(
