@@ -209,7 +209,7 @@ async def add_to_bookshelf(
     comments: Optional[str] = None,
     date_started: Optional[date] = None,
     date_ended: Optional[date] = None,
-    background_tasks: BackgroundTasks = None,
+    background_tasks: BackgroundTasks = BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     try:
