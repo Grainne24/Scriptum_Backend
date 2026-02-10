@@ -134,37 +134,61 @@ def get_bookshelf_book_details(
         )
     
 async def analyse_book_background(book_id: UUID):
+    print(f"Task started for book {book_id}")
     db = SessionLocal()
+    
     try:
-        #First check if it has already been analysed
+        #Check if the book has already been analyzed
         existing_profile = db.query(StylometricProfile).filter(
             StylometricProfile.book_id == book_id
         ).first()
         
         if existing_profile:
-            print(f"Book {book_id} already analysed, skipping")
+            print(f"Book {book_id} already analyzed, skipping")
             return
         
-        #Get all of the book details
+        # Get book details
         book = db.query(Book).filter(Book.book_id == book_id).first()
-        if not book or not book.text_file_path:
-            print(f"Book {book_id} not found or no text path")
+        if not book:
+            print(f"Book {book_id} not found in database")
+            return
+            
+        if not book.text_file_path:
+            print(f"Book {book_id} has no text_file_path")
+            return
+        
+        print(f"Found book: '{book.title}' by {book.author}")
+        print(f"Text file path: {book.text_file_path}")
+        
+        #Check if it's a Gutenberg book
+        if not book.text_file_path or "gutenberg_" not in book.text_file_path:
+            print(f"Book {book_id} is not from Gutenberg, skipping analysis")
             return
         
         #Extract the Gutenberg ID
-        gutenberg_id = int(book.text_file_path.replace("gutenberg_", ""))
-        print(f"Starting background analysis for book {book_id} (Gutenberg {gutenberg_id})")
-        
-        #Fetch the text from Gutenberg
-        text = await gutendex_service.get_book_text(gutenberg_id)
-        if not text:
-            print(f"Could not fetch text for Gutenberg ID {gutenberg_id}")
+        try:
+            gutenberg_id = int(book.text_file_path.replace("gutenberg_", ""))
+            print(f"Extracted Gutenberg ID: {gutenberg_id}")
+        except ValueError as e:
+            print(f"Failed to extract Gutenberg ID from '{book.text_file_path}': {e}")
             return
         
-        #Analyse the text
-        analysis_results = stylometry_analyser.analyse_text(text)
+        #Fetch the full text of the book from Gutenberg
+        print(f"Fetching text from Gutenberg API...")
+        text = await gutendex_service.get_book_text(gutenberg_id)
         
-        #Then it will create the stylometric profile
+        if not text:
+            print(f"ERROR: Could not fetch text for Gutenberg ID {gutenberg_id}")
+            return
+        
+        print(f"Fetched {len(text)} characters")
+        
+        #Analyze the text of the book
+        print(f"Starting stylometric analysis...")
+        analysis_results = stylometry_analyser.analyse_text(text)
+        print(f"Analysis complete: {analysis_results}")
+        
+        #Create the stylometric profile for the book
         profile = StylometricProfile(
             book_id=book_id,
             pacing_score=analysis_results["pacing_score"],
@@ -184,27 +208,33 @@ async def analyse_book_background(book_id: UUID):
         if hasattr(StylometricProfile, 'dialogue_percentage'):
             profile.dialogue_percentage = analysis_results.get("dialogue_percentage")
         
+        print(f"Adding profile to database...")
         db.add(profile)
         book.analysed = True
+        
+        print(f"Committing to database...")
         db.commit()
         
-        print(f"Successfully analysed book {book_id}")
+        print(f"Successfully analyzed and saved book {book_id}")
         
     except Exception as e:
         db.rollback()
-        print(f"Background analysis failed for book {book_id}: {str(e)}")
+        print(f"Analysis failed for book {book_id}: {str(e)}")
+        import traceback
+        print(f"Full traceback:\n{traceback.format_exc()}")
     finally:
         db.close()
+        print(f"Database session closed for book {book_id}")
 
 @router.post("/my-bookshelf/{book_id}")
 async def add_to_bookshelf(
     book_id: UUID,
-    user_id: str, 
+    user_id: str,
+    background_tasks: BackgroundTasks, 
     book_status: str = "want_to_read",
     comments: Optional[str] = None,
     date_started: Optional[date] = None,
     date_ended: Optional[date] = None,
-    background_tasks: BackgroundTasks = BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     try:
