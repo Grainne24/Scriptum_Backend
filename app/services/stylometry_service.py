@@ -38,6 +38,12 @@ class StylometryAnalyser:
             pacing_score = min(100, cv)
         else:
             pacing_score = 50.0
+
+        print(f"Average sentence length: {avg_len}")
+        print(f"Standard deviation: {std_dev}")
+        print(f"Coefficient of variation: {(std_dev / avg_len) * 100}")
+        print(f"Min sentence length: {min(sentence_lengths)}")
+        print(f"Max sentence length: {max(sentence_lengths)}")
         
         #Calculate the tone score (placeholder - can be enhanced with sentiment analysis)
         exclamation_count = text.count('!')
@@ -49,7 +55,7 @@ class StylometryAnalyser:
         vocabulary_richness = lexical_diversity * 100
         
         #Calculates the dialogue percentage (this is a rough estimate)
-        dialogue_matches = re.findall(r'[""][^""]+[""]|"[^"]+"|\'[^\']+\'', text)
+        dialogue_matches = re.findall(r'"[^"]+"', text)
         dialogue_words = sum(len(match.split()) for match in dialogue_matches)
         dialogue_percentage = (dialogue_words / total_words * 100) if total_words > 0 else 0
         
