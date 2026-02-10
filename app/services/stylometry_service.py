@@ -6,6 +6,7 @@ from faststylometry import load_corpus_from_folder, calculate_burrows_delta
 import os
 from typing import Dict, Optional
 import re
+import math
 
 class StylometryAnalyser:
     
@@ -32,20 +33,25 @@ class StylometryAnalyser:
             sentence_lengths = [len(s.split()) for s in sentences]
             avg_len = sum(sentence_lengths) / len(sentence_lengths)
             variance = sum((x - avg_len) ** 2 for x in sentence_lengths) / len(sentence_lengths)
-            pacing_score = min(100, variance)  #This is normalised from 0-100
+            std_dev = math.sqrt(variance)
+            cv = (std_dev / avg_len * 100) if avg_len > 0 else 0
+            pacing_score = min(100, cv)
         else:
             pacing_score = 50.0
         
         #Calculate the tone score (placeholder - can be enhanced with sentiment analysis)
-        punctuation_count = sum(1 for char in text if char in '!?.')
-        tone_score = min(100, (punctuation_count / total_sentences) * 10) if total_sentences > 0 else 50.0
+        exclamation_count = text.count('!')
+        question_count = text.count('?')
+        emotional_punctuation = exclamation_count + question_count
+        tone_score = min(100, (emotional_punctuation / total_sentences) * 50) if total_sentences > 0 else 0
         
         #Calculates the vocabulary richness (lexical diversity scaled to 0-100)
         vocabulary_richness = lexical_diversity * 100
         
         #Calculates the dialogue percentage (this is a rough estimate)
-        dialogue_chars = text.count('"') + text.count("'")
-        dialogue_percentage = min(100, (dialogue_chars / len(text)) * 200) if len(text) > 0 else 0
+        dialogue_matches = re.findall(r'[""][^""]+[""]|"[^"]+"|\'[^\']+\'', text)
+        dialogue_words = sum(len(match.split()) for match in dialogue_matches)
+        dialogue_percentage = (dialogue_words / total_words * 100) if total_words > 0 else 0
         
         #Calculates the punctuation density
         punctuation_density = sum(1 for char in text if char in ',.!?;:') / total_words if total_words > 0 else 0
