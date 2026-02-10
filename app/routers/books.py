@@ -13,6 +13,8 @@ from app.schemas import BookCreate, BookResponse, BookUpdate, UserBookshelfUpdat
 from app.services.gutendex_service import gutendex_service
 from app.services.stylometry_service import stylometry_analyser
 
+import asyncio
+
 router = APIRouter(prefix="/books", tags=["books"])
 
 '''
@@ -82,7 +84,7 @@ def get_bookshelf_book_details(
     try:
         user_uuid = UUID(user_id)
         
-        # Join to get both book and bookshelf data
+        #Join to get both book and bookshelf data
         result = db.query(Book, UserBookshelf).join(
             UserBookshelf, Book.book_id == UserBookshelf.book_id
         ).filter(
@@ -133,7 +135,7 @@ def get_bookshelf_book_details(
             detail=f"Failed to fetch book details: {str(e)}"
         )
     
-async def analyse_book_background(book_id: UUID):
+def analyse_book_background(book_id: UUID):
     print(f"Task started for book {book_id}")
     db = SessionLocal()
     
@@ -175,7 +177,10 @@ async def analyse_book_background(book_id: UUID):
         
         #Fetch the full text of the book from Gutenberg
         print(f"Fetching text from Gutenberg API...")
-        text = await gutendex_service.get_book_text(gutenberg_id)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        text = loop.run_until_complete(gutendex_service.get_book_text(gutenberg_id))
+        loop.close()
         
         if not text:
             print(f"ERROR: Could not fetch text for Gutenberg ID {gutenberg_id}")
