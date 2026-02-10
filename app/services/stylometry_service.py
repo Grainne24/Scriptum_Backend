@@ -58,6 +58,9 @@ class StylometryAnalyser:
         dialogue_matches = re.findall(r'"[^"]+"', text)
         dialogue_words = sum(len(match.split()) for match in dialogue_matches)
         dialogue_percentage = (dialogue_words / total_words * 100) if total_words > 0 else 0
+
+        print(f"Quote count in text: {text.count('"')}")
+        print(f"First quote position: {text.find('"')}")
         
         #Calculates the punctuation density
         punctuation_density = sum(1 for char in text if char in ',.!?;:') / total_words if total_words > 0 else 0
@@ -79,10 +82,20 @@ class StylometryAnalyser:
         }
     
     def _split_sentences(self, text: str) -> list:
-        """Split text into sentences"""
-        #Simple sentence splitting
-        sentences = re.split(r'[.!?]+', text)
-        return [s.strip() for s in sentences if s.strip()]
+        #Replace common abbreviations with placeholders to avoid splitting on them
+        text = re.sub(r'\bMrs\.', 'Mrs', text)
+        text = re.sub(r'\bMr\.', 'Mr', text)
+        text = re.sub(r'\bDr\.', 'Dr', text)
+        text = re.sub(r'\bSt\.', 'St', text)
+        text = re.sub(r'\bProf\.', 'Prof', text)
+        
+        #Split on sentence-ending punctuation
+        sentences = re.split(r'[.!?]+\s+', text)
+        
+        #Filter out very short "sentences" (likely artifacts)
+        sentences = [s.strip() for s in sentences if s.strip() and len(s.split()) >= 3]
+        
+        return sentences
 
 #Creates singleton instance
 stylometry_analyser = StylometryAnalyser()
