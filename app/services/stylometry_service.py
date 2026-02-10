@@ -84,20 +84,31 @@ class StylometryAnalyser:
         }
     
     def _split_sentences(self, text: str) -> list:
-        #Replace common abbreviations with placeholders to avoid splitting on them
-        text = re.sub(r'\bMrs\.', 'Mrs', text)
-        text = re.sub(r'\bMr\.', 'Mr', text)
-        text = re.sub(r'\bDr\.', 'Dr', text)
-        text = re.sub(r'\bSt\.', 'St', text)
-        text = re.sub(r'\bProf\.', 'Prof', text)
+        #Replace common abbreviations temporarily
+        abbreviations = {
+            r'\bMrs\.': 'MrsXXX',
+            r'\bMr\.': 'MrXXX',
+            r'\bDr\.': 'DrXXX',
+            r'\bSt\.': 'StXXX',
+            r'\bProf\.': 'ProfXXX',
+            r'\bMs\.': 'MsXXX',
+            r'\bJr\.': 'JrXXX',
+            r'\bSr\.': 'SrXXX',
+        }
         
-        #Split on sentence-ending punctuation
-        sentences = re.split(r'[.!?]+\s+', text)
+        for pattern, replacement in abbreviations.items():
+            text = re.sub(pattern, replacement, text)
         
-        #Filter out very short "sentences" (likely artifacts)
-        sentences = [s.strip() for s in sentences if s.strip() and len(s.split()) >= 3]
+        #Split on sentence-ending punctuation followed by space and capital letter
+        sentences = re.split(r'[.!?]+\s+(?=[A-Z])', text)
         
-        return sentences
+        #Restore abbreviations
+        for pattern, replacement in abbreviations.items():
+            abbrev = pattern.replace(r'\b', '').replace(r'\.', '')
+            sentences = [s.replace(replacement, abbrev + '.') for s in sentences]
+        
+        #Filter out very short sentences
+        return [s.strip() for s in sentences if s.strip() and len(s.split()) >= 3]
 
 #Creates singleton instance
 stylometry_analyser = StylometryAnalyser()
