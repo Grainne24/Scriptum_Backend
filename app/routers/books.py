@@ -140,7 +140,7 @@ def analyse_book_background(book_id: UUID):
     db = SessionLocal()
     
     try:
-        #Check if the book has already been analyzed
+        #First, check if the book has already been analyzed
         existing_profile = db.query(StylometricProfile).filter(
             StylometricProfile.book_id == book_id
         ).first()
@@ -149,7 +149,7 @@ def analyse_book_background(book_id: UUID):
             print(f"Book {book_id} already analyzed, skipping")
             return
         
-        # Get book details
+        #This gets the book details
         book = db.query(Book).filter(Book.book_id == book_id).first()
         if not book:
             print(f"Book {book_id} not found in database")
@@ -162,20 +162,28 @@ def analyse_book_background(book_id: UUID):
         print(f"Found book: '{book.title}' by {book.author}")
         print(f"Text file path: {book.text_file_path}")
         
-        #Check if it's a Gutenberg book
-        if not book.text_file_path or "gutenberg_" not in book.text_file_path:
-            print(f"Book {book_id} is not from Gutenberg, skipping analysis")
-            return
-        
-        #Extract the Gutenberg ID
         try:
-            gutenberg_id = int(book.text_file_path.replace("gutenberg_", ""))
+            if "gutenberg_" in book.text_file_path:
+                gutenberg_id = int(book.text_file_path.replace("gutenberg_", ""))
+            elif "gutenberg.org/ebooks/" in book.text_file_path:
+                #Then extract ID from the url
+                import re
+                match = re.search(r'/ebooks/(\d+)', book.text_file_path)
+                if match:
+                    gutenberg_id = int(match.group(1))
+                else:
+                    print(f"Could not extract Gutenberg ID from URL: {book.text_file_path}")
+                    return
+            else:
+                print(f"Unknown text_file_path format: {book.text_file_path}")
+                return
+                
             print(f"Extracted Gutenberg ID: {gutenberg_id}")
-        except ValueError as e:
+        except (ValueError, AttributeError) as e:
             print(f"Failed to extract Gutenberg ID from '{book.text_file_path}': {e}")
             return
         
-        #Fetch the full text of the book from Gutenberg
+        #This fetchs the full text of the book from Gutenberg
         print(f"Fetching text from Gutenberg API...")
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -188,12 +196,12 @@ def analyse_book_background(book_id: UUID):
         
         print(f"Fetched {len(text)} characters")
         
-        #Analyze the text of the book
+        #Then analyze the text of the book
         print(f"Starting stylometric analysis...")
         analysis_results = stylometry_analyser.analyse_text(text)
         print(f"Analysis complete: {analysis_results}")
         
-        #Create the stylometric profile for the book
+        #FInally create the stylometric profile for the book
         profile = StylometricProfile(
             book_id=book_id,
             pacing_score=analysis_results["pacing_score"],
@@ -230,84 +238,6 @@ def analyse_book_background(book_id: UUID):
     finally:
         db.close()
         print(f"Database session closed for book {book_id}")
-
-@router.post("/my-bookshelf/{book_id}")
-async def add_to_bookshelf(
-    book_id: UUID,
-    user_id: str,
-    background_tasks: BackgroundTasks, 
-    book_status: str = "want_to_read",
-    comments: Optional[str] = None,
-    date_started: Optional[date] = None,
-    date_ended: Optional[date] = None,
-    db: Session = Depends(get_db)
-):
-    try:
-        user_uuid = UUID(user_id)
-        
-        #Check if it's already in the bookshelf
-        existing = db.query(UserBookshelf).filter(
-            UserBookshelf.user_id == user_uuid,
-            UserBookshelf.book_id == book_id
-        ).first()
-        
-        if existing:
-            existing.book_status = book_status
-            existing.comments = comments
-            existing.date_started = date_started
-            existing.date_ended = date_ended
-            db.commit()
-            return {"message": "Book status updated"}
-        
-        #Verify the book already exists
-        book = db.query(Book).filter(Book.book_id == book_id).first()
-        if not book:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Book not found"
-            )
-        
-        #Add the book to the bookshelf
-        bookshelf_entry = UserBookshelf(
-            user_id=user_uuid,
-            book_id=book_id,
-            book_status=book_status,
-            comments=comments,
-            date_started=date_started,
-            date_ended=date_ended
-        )
-        
-        db.add(bookshelf_entry)
-        db.commit()
-        
-        #Trigger the background analysis if the book hasn't been analysed yet
-        if background_tasks:
-            existing_profile = db.query(StylometricProfile).filter(
-                StylometricProfile.book_id == book_id
-            ).first()
-            
-            if not existing_profile:
-                background_tasks.add_task(
-                    analyse_book_background, 
-                    book_id
-                )
-                print(f"Queued background analysis for book {book_id}")
-        
-        return {
-            "message": "Book added to bookshelf successfully",
-            "analysis_queued": not bool(db.query(StylometricProfile).filter(
-                StylometricProfile.book_id == book_id
-            ).first())
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to add book: {str(e)}"
-        )
     
 @router.put("/my-bookshelf/{book_id}")
 def update_bookshelf_entry(
