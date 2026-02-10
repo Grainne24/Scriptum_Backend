@@ -59,8 +59,10 @@ class StylometryAnalyser:
         dialogue_words = sum(len(match.split()) for match in dialogue_matches)
         dialogue_percentage = (dialogue_words / total_words * 100) if total_words > 0 else 0
 
-        print(f"Quote count in text: {text.count('"')}")
-        print(f"First quote position: {text.find('"')}")
+        quote_count = text.count('"')
+        quote_position = text.find('"')
+        print(f"Quote count in text: {quote_count}")
+        print(f"First quote position: {quote_position}")
         
         #Calculates the punctuation density
         punctuation_density = sum(1 for char in text if char in ',.!?;:') / total_words if total_words > 0 else 0
