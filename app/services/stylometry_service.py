@@ -4,6 +4,7 @@
 
 from faststylometry import load_corpus_from_folder, calculate_burrows_delta
 import os
+from nltk.tokenize import sent_tokenize
 from typing import Dict, Optional
 import re
 import math
@@ -55,7 +56,8 @@ class StylometryAnalyser:
         vocabulary_richness = lexical_diversity * 100
         
         #Calculates the dialogue percentage (this is a rough estimate)
-        dialogue_matches = re.findall(r'"[^"]+"', text)
+        dialogue_pattern = r'[""][^""]+[""]|"[^"]+"'
+        dialogue_matches = re.findall(dialogue_pattern, text)
         dialogue_words = sum(len(match.split()) for match in dialogue_matches)
         dialogue_percentage = (dialogue_words / total_words * 100) if total_words > 0 else 0
 
@@ -84,30 +86,23 @@ class StylometryAnalyser:
         }
     
     def _split_sentences(self, text: str) -> list:
-        #Replace common abbreviations temporarily
-        abbreviations = {
-            r'\bMrs\.': 'MrsXXX',
-            r'\bMr\.': 'MrXXX',
-            r'\bDr\.': 'DrXXX',
-            r'\bSt\.': 'StXXX',
-            r'\bProf\.': 'ProfXXX',
-            r'\bMs\.': 'MsXXX',
-            r'\bJr\.': 'JrXXX',
-            r'\bSr\.': 'SrXXX',
-        }
+        # Use NLTK if available (better for complex texts)
+        try:
+            sentences = sent_tokenize(text)
+        except:
+            # Replace common abbreviations
+            text = re.sub(r'\bMrs\.', 'MrsXXX', text)
+            text = re.sub(r'\bMr\.', 'MrXXX', text)
+            text = re.sub(r'\bDr\.', 'DrXXX', text)
+            text = re.sub(r'\bSt\.', 'StXXX', text)
+            
+            # Split on sentence endings
+            sentences = re.split(r'[.!?]+\s+(?=[A-Z])', text)
+            
+            # Restore abbreviations
+            sentences = [s.replace('MrsXXX', 'Mrs.').replace('MrXXX', 'Mr.').replace('DrXXX', 'Dr.').replace('StXXX', 'St.') for s in sentences]
         
-        for pattern, replacement in abbreviations.items():
-            text = re.sub(pattern, replacement, text)
-        
-        #Split on sentence-ending punctuation followed by space and capital letter
-        sentences = re.split(r'[.!?]+\s+(?=[A-Z])', text)
-        
-        #Restore abbreviations
-        for pattern, replacement in abbreviations.items():
-            abbrev = pattern.replace(r'\b', '').replace(r'\.', '')
-            sentences = [s.replace(replacement, abbrev + '.') for s in sentences]
-        
-        #Filter out very short sentences
+        # Filter very short sentences
         return [s.strip() for s in sentences if s.strip() and len(s.split()) >= 3]
 
 #Creates singleton instance
