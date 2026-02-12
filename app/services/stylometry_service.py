@@ -23,7 +23,7 @@ class StylometryAnalyser:
         total_sentences = len(sentences)
         unique_words = len(set(word.lower() for word in words))
         
-        #Calculate the metrics
+        #Calculate the rest of the metrics
         avg_sentence_length = total_words / total_sentences if total_sentences > 0 else 0
         avg_word_length = sum(len(word) for word in words) / total_words if total_words > 0 else 0
         lexical_diversity = unique_words / total_words if total_words > 0 else 0
@@ -33,7 +33,7 @@ class StylometryAnalyser:
             sentence_lengths = [len(s.split()) for s in sentences]
             avg_len = sum(sentence_lengths) / len(sentence_lengths)
             variance = sum((x - avg_len) ** 2 for x in sentence_lengths) / len(sentence_lengths)
-            std_dev = math.sqrt(variance)
+            std_dev = math.sqrt(variance) #normalisation 
             cv = (std_dev / avg_len * 100) if avg_len > 0 else 0
             pacing_score = min(100, cv)
         else:
@@ -113,6 +113,47 @@ class StylometryAnalyser:
         
         #Filter out very short sentences (likely artifacts)
         return [s.strip() for s in sentences if s.strip() and len(s.split()) >= 3]
+    
+    def calculate_normalized_similarity(self, profile1: StylometricProfile, profile2: StylometricProfile, db: Session) -> Dict[str, float]:
+
+        #Get min/max values across all books for normalisation
+        stats = db.query(
+            func.min(StylometricProfile.pacing_score).label('min_pacing'),
+            func.max(StylometricProfile.pacing_score).label('max_pacing'),
+            func.min(StylometricProfile.tone_score).label('min_tone'),
+            func.max(StylometricProfile.tone_score).label('max_tone'),
+            func.min(StylometricProfile.vocabulary_richness).label('min_vocab'),
+            func.max(StylometricProfile.vocabulary_richness).label('max_vocab'),
+            func.min(StylometricProfile.avg_sentence_length).label('min_sent'),
+            func.max(StylometricProfile.avg_sentence_length).label('max_sent')
+        ).first()
+        
+        #Normalise the pacing
+        norm_pacing1 = (profile1.pacing_score - stats.min_pacing) / (stats.max_pacing - stats.min_pacing) if stats.max_pacing != stats.min_pacing else 0
+        norm_pacing2 = (profile2.pacing_score - stats.min_pacing) / (stats.max_pacing - stats.min_pacing) if stats.max_pacing != stats.min_pacing else 0
+        pacing_sim = 1 - abs(norm_pacing1 - norm_pacing2)
+        
+        #Normalise the tone
+        norm_tone1 = (profile1.tone_score - stats.min_tone) / (stats.max_tone - stats.min_tone) if stats.max_tone != stats.min_tone else 0
+        norm_tone2 = (profile2.tone_score - stats.min_tone) / (stats.max_tone - stats.min_tone) if stats.max_tone != stats.min_tone else 0
+        tone_sim = 1 - abs(norm_tone1 - norm_tone2)
+        
+        #Normalise the vocabulary
+        norm_vocab1 = (profile1.vocabulary_richness - stats.min_vocab) / (stats.max_vocab - stats.min_vocab) if stats.max_vocab != stats.min_vocab else 0
+        norm_vocab2 = (profile2.vocabulary_richness - stats.min_vocab) / (stats.max_vocab - stats.min_vocab) if stats.max_vocab != stats.min_vocab else 0
+        vocab_sim = 1 - abs(norm_vocab1 - norm_vocab2)
+        
+        #Normalise the sentence length
+        norm_sent1 = (profile1.avg_sentence_length - stats.min_sent) / (stats.max_sent - stats.min_sent) if stats.max_sent != stats.min_sent else 0
+        norm_sent2 = (profile2.avg_sentence_length - stats.min_sent) / (stats.max_sent - stats.min_sent) if stats.max_sent != stats.min_sent else 0
+        sent_sim = 1 - abs(norm_sent1 - norm_sent2)
+        
+        return {
+            "pacing_similarity": pacing_sim,
+            "tone_similarity": tone_sim,
+            "vocabulary_similarity": vocab_sim,
+            "sentence_length_similarity": sent_sim
+        }
 
 #Creates singleton instance
 stylometry_analyser = StylometryAnalyser()
