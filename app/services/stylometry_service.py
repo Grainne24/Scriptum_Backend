@@ -74,17 +74,14 @@ class StylometryAnalyser:
     
     def calculate_similarity(self, text1: str, text2: str) -> float:
         try:
-            #Create a temporary corpus with both texts
-            from faststylometry import Corpus
+            #Tokenize the texts into lists of words
+            tokens1 = text1.lower().split()
+            tokens2 = text2.lower().split()
             
-            corpus = Corpus()
-            corpus.add_book("book1", text1)
-            corpus.add_book("book2", text2)
+            #Calculate Burrows' Delta using token lists
+            delta = calculate_burrows_delta(tokens1, tokens2)
             
-            #Calculate Burrows' Delta between the two books
-            delta = calculate_burrows_delta(corpus.books[0], corpus.books[1])
-            
-            #Convert to similarity score
+            #Convert to similarity score (0-1 range, where 1 = most similar)
             similarity = 1 / (1 + delta)
             
             return similarity
