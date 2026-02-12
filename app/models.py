@@ -2,7 +2,7 @@
     This file defines what the database looks like in PostgreSQL and converts it to Python also known as ORM(Object Relational Mapping)
 '''
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Text, Float, CheckConstraint, TIMESTAMP
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Text, Float, CheckConstraint, TIMESTAMP, Date
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
