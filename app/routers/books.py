@@ -677,6 +677,17 @@ def delete_book(book_id: UUID, db: Session = Depends(get_db)):
     
     return None
 
+def extract_gutenberg_id(text_file_path: str) -> int:
+    """Extract Gutenberg ID from text_file_path"""
+    if "gutenberg_" in text_file_path:
+        return int(text_file_path.replace("gutenberg_", ""))
+    elif "gutenberg.org/ebooks/" in text_file_path:
+        import re
+        match = re.search(r'/ebooks/(\d+)', text_file_path)
+        if match:
+            return int(match.group(1))
+    raise ValueError(f"Cannot extract Gutenberg ID from: {text_file_path}")
+
 @router.get("/recommendations/{book_id}")
 async def get_book_recommendations(
     book_id: UUID,
