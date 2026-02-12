@@ -8,6 +8,7 @@ from typing import Dict, Optional
 import re
 import math
 
+
 class StylometryAnalyser:
     
     def analyse_text(self, text: str) -> Dict[str, float]:
@@ -115,6 +116,9 @@ class StylometryAnalyser:
         return [s.strip() for s in sentences if s.strip() and len(s.split()) >= 3]
     
     def calculate_normalized_similarity(self, profile1: StylometricProfile, profile2: StylometricProfile, db: Session) -> Dict[str, float]:
+
+        from sqlalchemy import func
+        from app.models import StylometricProfile
 
         #Get min/max values across all books for normalisation
         stats = db.query(
