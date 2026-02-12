@@ -115,8 +115,7 @@ class StylometryAnalyser:
         #Filter out very short sentences (likely artifacts)
         return [s.strip() for s in sentences if s.strip() and len(s.split()) >= 3]
     
-    def calculate_normalized_similarity(self, profile1: StylometricProfile, profile2: StylometricProfile, db: Session) -> Dict[str, float]:
-
+    def calculate_normalized_similarity(self, profile1, profile2, db) -> Dict[str, float]:
         from sqlalchemy import func
         from app.models import StylometricProfile
 
