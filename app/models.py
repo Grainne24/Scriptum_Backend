@@ -2,7 +2,7 @@
     This file defines what the database looks like in PostgreSQL and converts it to Python also known as ORM(Object Relational Mapping)
 '''
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Text, Float, CheckConstraint, TIMESTAMP, Date, DECIMAL
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Text, Float, CheckConstraint, TIMESTAMP, Date, Numeric
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -68,14 +68,14 @@ class StylometricProfile(Base):
     
     profile_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     book_id = Column(UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="CASCADE"), unique=True, nullable=False)
-    pacing_score = Column(DECIMAL(5, 2), nullable=True)
-    tone_score = Column(DECIMAL(5, 2), nullable=True)
-    vocabulary_richness = Column(DECIMAL(5, 2), nullable=True)
-    avg_sentence_length = Column(DECIMAL(6, 2), nullable=True)
-    avg_word_length = Column(DECIMAL(5, 2), nullable=True)
-    lexical_diversity = Column(DECIMAL(5, 4), nullable=True)
-    punctuation_density = Column(DECIMAL(5, 4), nullable=True)  
-    dialogue_percentage = Column(DECIMAL(5, 2), nullable=True)  
+    pacing_score = Column(Numeric(5, 2), nullable=True)
+    tone_score = Column(Numeric(5, 2), nullable=True)
+    vocabulary_richness = Column(Numeric(5, 2), nullable=True)
+    avg_sentence_length = Column(Numeric(6, 2), nullable=True)
+    avg_word_length = Column(Numeric(5, 2), nullable=True)
+    lexical_diversity = Column(Numeric(5, 4), nullable=True)
+    punctuation_density = Column(Numeric(5, 4), nullable=True)  
+    dialogue_percentage = Column(Numeric(5, 2), nullable=True)  
     total_words = Column(Integer, nullable=True)
     total_sentences = Column(Integer, nullable=True)
     unique_words = Column(Integer, nullable=True)
@@ -92,7 +92,7 @@ class Rating(Base):
     rating_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
     book_id = Column(UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="CASCADE"), nullable=False, index=True)
-    rating = Column(DECIMAL(3, 2), nullable=False)
+    rating = Column(Numeric(3, 2), nullable=False)
     review_text = Column(Text, nullable=True)
     rated_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
@@ -108,11 +108,11 @@ class Recommendation(Base):
     recommendation_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
     book_id = Column(UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="CASCADE"), nullable=False)
-    similarity_score = Column(DECIMAL(5, 4), nullable=False)
-    pacing_similarity = Column(DECIMAL(5, 4), nullable=True)
-    tone_similarity = Column(DECIMAL(5, 4), nullable=True)
-    vocabulary_similarity = Column(DECIMAL(5, 4), nullable=True)
-    sentence_length_similarity = Column(DECIMAL(5, 4), nullable=True)
+    similarity_score = Column(Numeric(5, 4), nullable=False)
+    pacing_similarity = Column(Numeric(5, 4), nullable=True)
+    tone_similarity = Column(Numeric(5, 4), nullable=True)
+    vocabulary_similarity = Column(Numeric(5, 4), nullable=True)
+    sentence_length_similarity = Column(Numeric(5, 4), nullable=True)
     rank = Column(Integer, nullable=True)
     generated_at = Column(TIMESTAMP, server_default=func.now())
     viewed = Column(Boolean, default=False)
