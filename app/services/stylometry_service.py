@@ -74,16 +74,25 @@ class StylometryAnalyser:
     
     def calculate_similarity(self, text1: str, text2: str) -> float:
         try:
-            #Calculate Burrows' Delta using faststylometry
-            delta = calculate_burrows_delta(text1, text2)
+            #Create a temporary corpus with both texts
+            from faststylometry import Corpus
             
-            #Convert to similarity score (0-1 range, where 1 = most similar)
+            corpus = Corpus()
+            corpus.add_book("book1", text1)
+            corpus.add_book("book2", text2)
+            
+            #Calculate Burrows' Delta between the two books
+            delta = calculate_burrows_delta(corpus.books[0], corpus.books[1])
+            
+            #Convert to similarity score
             similarity = 1 / (1 + delta)
             
             return similarity
             
         except Exception as e:
             print(f"Error calculating Burrows' Delta: {e}")
+            import traceback
+            print(f"Full traceback: {traceback.format_exc()}")
             return 0.0
     
     def _split_sentences(self, text: str) -> list:
