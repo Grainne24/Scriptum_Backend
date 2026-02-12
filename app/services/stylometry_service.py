@@ -2,9 +2,8 @@
     This file uses stylometry to analyse the writing style of book texts
 '''
 
-from faststylometry import load_corpus_from_folder, calculate_burrows_delta
+from faststylometry import calculate_burrows_delta
 import os
-from nltk.tokenize import sent_tokenize
 from typing import Dict, Optional
 import re
 import math
@@ -39,14 +38,8 @@ class StylometryAnalyser:
             pacing_score = min(100, cv)
         else:
             pacing_score = 50.0
-
-        print(f"Average sentence length: {avg_len}")
-        print(f"Standard deviation: {std_dev}")
-        print(f"Coefficient of variation: {(std_dev / avg_len) * 100}")
-        print(f"Min sentence length: {min(sentence_lengths)}")
-        print(f"Max sentence length: {max(sentence_lengths)}")
         
-        #Calculate the tone score (placeholder - can be enhanced with sentiment analysis)
+        #Calculate the tone score (based on emotional punctuation)
         exclamation_count = text.count('!')
         question_count = text.count('?')
         emotional_punctuation = exclamation_count + question_count
@@ -55,16 +48,11 @@ class StylometryAnalyser:
         #Calculates the vocabulary richness (lexical diversity scaled to 0-100)
         vocabulary_richness = lexical_diversity * 100
         
-        #Calculates the dialogue percentage (this is a rough estimate)
+        #Calculates the dialogue percentage
         dialogue_pattern = r'[""][^""]+[""]|"[^"]+"'
         dialogue_matches = re.findall(dialogue_pattern, text)
         dialogue_words = sum(len(match.split()) for match in dialogue_matches)
         dialogue_percentage = (dialogue_words / total_words * 100) if total_words > 0 else 0
-
-        quote_count = text.count('"')
-        quote_position = text.find('"')
-        print(f"Quote count in text: {quote_count}")
-        print(f"First quote position: {quote_position}")
         
         #Calculates the punctuation density
         punctuation_density = sum(1 for char in text if char in ',.!?;:') / total_words if total_words > 0 else 0
@@ -80,29 +68,50 @@ class StylometryAnalyser:
             "dialogue_percentage": round(dialogue_percentage, 2),
             "total_words": total_words,
             "total_sentences": total_sentences,
-            "unique_words": unique_words,
-            "start": words
-
+            "unique_words": unique_words
         }
     
-    def _split_sentences(self, text: str) -> list:
-        # Use NLTK if available (better for complex texts)
+    def calculate_similarity(self, text1: str, text2: str) -> float:
         try:
+            #Calculate Burrows' Delta using faststylometry
+            delta = calculate_burrows_delta(text1, text2)
+            
+            #Convert to similarity score (0-1 range, where 1 = most similar)
+            similarity = 1 / (1 + delta)
+            
+            return similarity
+            
+        except Exception as e:
+            print(f"Error calculating Burrows' Delta: {e}")
+            return 0.0
+    
+    def _split_sentences(self, text: str) -> list:
+        try:
+            #Try using NLTK if available (best for complex texts)
+            from nltk.tokenize import sent_tokenize
             sentences = sent_tokenize(text)
-        except:
-            # Replace common abbreviations
+        except ImportError:
+            #This is a fallback incase nltk doesn't work
             text = re.sub(r'\bMrs\.', 'MrsXXX', text)
             text = re.sub(r'\bMr\.', 'MrXXX', text)
             text = re.sub(r'\bDr\.', 'DrXXX', text)
+            text = re.sub(r'\bMs\.', 'MsXXX', text)
             text = re.sub(r'\bSt\.', 'StXXX', text)
             
-            # Split on sentence endings
+            #Split on sentence-ending punctuation followed by space and capital letter
             sentences = re.split(r'[.!?]+\s+(?=[A-Z])', text)
             
-            # Restore abbreviations
-            sentences = [s.replace('MrsXXX', 'Mrs.').replace('MrXXX', 'Mr.').replace('DrXXX', 'Dr.').replace('StXXX', 'St.') for s in sentences]
+            #Restore abbreviations
+            sentences = [
+                s.replace('MrsXXX', 'Mrs.')
+                 .replace('MrXXX', 'Mr.')
+                 .replace('DrXXX', 'Dr.')
+                 .replace('MsXXX', 'Ms.')
+                 .replace('StXXX', 'St.')
+                for s in sentences
+            ]
         
-        # Filter very short sentences
+        #Filter out very short sentences (likely artifacts)
         return [s.strip() for s in sentences if s.strip() and len(s.split()) >= 3]
 
 #Creates singleton instance
