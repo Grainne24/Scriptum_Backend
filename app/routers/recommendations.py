@@ -177,5 +177,12 @@ def get_recommendations(book_id: UUID, limit: int = 10, db: Session = Depends(ge
 
     print(f"Delta results: {results}")
     print(f"title_to_book keys: {list(title_to_book.keys())[:5]}")
+            
+    results = stylometry_analyser.get_recommendations(seed, candidate_list, top_n=limit)
+
+    print(f"Raw delta results: {results}")
+    print(f"Number of results: {len(results)}")
+    print(f"Candidate titles in map: {list(title_to_book.keys())}")
+
 
     return response
