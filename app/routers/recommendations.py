@@ -6,6 +6,7 @@ from app.routers.stylometry import stylometry_analyser
 from pydantic import BaseModel
 from typing import List
 from uuid import UUID
+from app.models import UserBookshelf
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
@@ -71,73 +72,107 @@ def get_recommendations(book_id: UUID, limit: int = 10, db: Session = Depends(ge
     return response
 
 @router.get("/for-user/{user_id}", response_model=List[RecommendationResponse])
-def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Session = Depends(get_db)):
-    from app.models import UserBook
+async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Session = Depends(get_db)):
+    try:
+        #Get user's bookshelf
+        user_books = db.query(UserBookshelf).filter(
+            UserBookshelf.user_id == user_id
+        ).all()
 
-    #Get all books on the user's bookshelf
-    user_books = db.query(UserBook).filter(UserBook.user_id == user_id).all()
+        if not user_books:
+            raise HTTPException(status_code=404, detail="User has no books on their bookshelf")
 
-    if not user_books:
-        raise HTTPException(status_code=404, detail="User has no books on their bookshelf")
+        shelf_book_ids = [ub.book_id for ub in user_books]
 
-    shelf_book_ids = [ub.book_id for ub in user_books]
+        #Get shelf books that have a gutenberg_id
+        shelf_books = db.query(Book).filter(
+            Book.book_id.in_(shelf_book_ids),
+            Book.gutenberg_id != None,
+            Book.analysed == True
+        ).all()
 
-    #Fetch full book records for shelf books that have text
-    shelf_books = db.query(Book).filter(
-        Book.book_id.in_(shelf_book_ids),
-        Book.text_source != None,
-        Book.analysed == True
-    ).all()
+        if not shelf_books:
+            raise HTTPException(status_code=400, detail="No analysed Gutenberg books found on shelf")
 
-    if not shelf_books:
-        raise HTTPException(status_code=400, detail="No analysed books with text found on shelf")
+        #Get candidate books not on the shelf
+        candidates = db.query(Book).filter(
+            Book.book_id.notin_(shelf_book_ids),
+            Book.gutenberg_id != None,
+            Book.analysed == True
+        ).limit(50).all()  # Keep limit low to avoid timeout on Render free tier
 
-    #Get all other analysed books NOT on the user's shelf
-    candidates = db.query(Book).filter(
-        Book.book_id.notin_(shelf_book_ids),
-        Book.text_source != None,
-        Book.analysed == True
-    ).limit(500).all()
+        if not candidates:
+            raise HTTPException(status_code=404, detail="No candidate books found")
 
-    if not candidates:
-        raise HTTPException(status_code=404, detail="No candidate books found")
+        #Fetch shelf book texts from Gutenberg
+        print("Fetching shelf book texts...")
+        shelf_texts = []
+        for book in shelf_books:
+            try:
+                text = await gutendex_service.get_book_text(book.gutenberg_id)
+                if text:
+                    shelf_texts.append(text[:30000])  # Cap each book at 30k chars
+                    print(f"  Got text for: {book.title[:50]}")
+            except Exception as e:
+                print(f"  Failed for {book.title}: {e}")
+                continue
 
-    #Combine all shelf book texts into one "user profile" text
-    #This represents the user's overall style preference
-    combined_user_text = " ".join([b.text_source[:50000] for b in shelf_books])
+        if not shelf_texts:
+            raise HTTPException(status_code=400, detail="Could not fetch text for any shelf books")
 
-    seed = {
-        "author": "User Profile",
-        "title": "User Bookshelf",
-        "text": combined_user_text
-    }
+        #Fetch candidate book texts from Gutenberg
+        print("Fetching candidate book texts...")
+        candidate_list = []
+        for book in candidates:
+            try:
+                text = await gutendex_service.get_book_text(book.gutenberg_id)
+                if text:
+                    candidate_list.append({
+                        "author": book.author,
+                        "title": book.title,
+                        "text": text[:30000],
+                        "book_id": str(book.book_id)
+                    })
+                    print(f"  Got text for: {book.title[:50]}")
+            except Exception as e:
+                print(f"  Failed for {book.title}: {e}")
+                continue
 
-    candidate_list = [
-        {
-            "author": b.author,
-            "title": b.title,
-            "text": b.text_source,
-            "book_id": str(b.book_id)
+        if not candidate_list:
+            raise HTTPException(status_code=404, detail="Could not fetch text for any candidate books")
+
+        #Build seed from combined shelf texts
+        combined_user_text = " ".join(shelf_texts)
+        seed = {
+            "author": "User Profile",
+            "title": "User Bookshelf",
+            "text": combined_user_text
         }
-        for b in candidates
-    ]
 
-    #Run Burrows' Delta
-    results = stylometry_analyser.get_recommendations(seed, candidate_list, top_n=limit)
+        #Run Burrows' Delta
+        results = stylometry_analyser.get_recommendations(seed, candidate_list, top_n=limit)
 
-    #Map back to full book objects
-    title_to_book = {b.title: b for b in candidates}
-    response = []
-    for r in results:
-        book = title_to_book.get(r["title"])
-        if book:
-            response.append(RecommendationResponse(
-                book_id=book.book_id,
-                title=book.title,
-                author=book.author,
-                cover_url=book.cover_url,
-                delta=r["delta"],
-                similarity=r["similarity"]
-            ))
+        #Map results back to book objects
+        title_to_book = {b.title: b for b in candidates}
+        response = []
+        for r in results:
+            book = title_to_book.get(r["title"])
+            if book:
+                response.append(RecommendationResponse(
+                    book_id=book.book_id,
+                    title=book.title,
+                    author=book.author,
+                    cover_url=book.cover_url,
+                    delta=r["delta"],
+                    similarity=r["similarity"]
+                ))
 
-    return response
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"RECOMMENDATION ERROR: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Recommendation failed: {str(e)}")
