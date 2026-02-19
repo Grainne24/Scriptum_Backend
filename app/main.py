@@ -5,7 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from app.routers import users, books
-from app.routers import stylometry  # Add this import
+from app.routers import stylometry
+from app.routers import recommendations
 
 #Createa database tables
 Base.metadata.create_all(bind=engine)
@@ -49,3 +50,4 @@ def read_root():
 app.include_router(users.router)
 app.include_router(books.router)
 app.include_router(stylometry.router)
+app.include_router(recommendations.router)

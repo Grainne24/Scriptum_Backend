@@ -9,7 +9,7 @@ from datetime import date
 
 from app.database import get_db, SessionLocal
 from app.models import Book, StylometricProfile, UserBookshelf, BookSimilarity
-from app.schemas import BookCreate, BookResponse, BookUpdate, UserBookshelfUpdate
+from app.schemas import BookResponse, BookUpdate, UserBookshelfUpdate
 from app.services.gutendex_service import gutendex_service
 from app.services.stylometry_service import stylometry_analyser
 

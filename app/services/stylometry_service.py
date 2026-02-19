@@ -26,7 +26,7 @@ class StylometryAnalyser:
         #Build the train corpus from all candidate books
         train_corpus = self.build_corpus(candidate_books)
 
-        # uild the test corpus from just the seed book
+        #uild the test corpus from just the seed book
         test_corpus = self.build_corpus([seed_book])
 
         #Calculate Burrows' Delta
