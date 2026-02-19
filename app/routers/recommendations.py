@@ -175,4 +175,7 @@ def get_recommendations(book_id: UUID, limit: int = 10, db: Session = Depends(ge
                 similarity=r["similarity"]
             ))
 
+    print(f"Delta results: {results}")
+    print(f"title_to_book keys: {list(title_to_book.keys())[:5]}")
+
     return response
