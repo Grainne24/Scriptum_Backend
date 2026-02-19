@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import List
 from uuid import UUID
 from app.models import UserBookshelf
+from app.services.gutendex_service import gutendex_service
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
