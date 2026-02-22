@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Book, UserBookshelf
+from app.models import Book, UserBookshelf, Recommendation
 from app.services.stylometry_service import stylometry_analyser
 from app.services.gutendex_service import gutendex_service
 from pydantic import BaseModel
 from typing import List
 from uuid import UUID
+import uuid
+from datetime import datetime
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
@@ -20,10 +22,11 @@ class RecommendationResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+
 @router.get("/for-user/{user_id}", response_model=List[RecommendationResponse])
 async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Session = Depends(get_db)):
     try:
-        #Get user's bookshelf
+        #Get the user's bookshelf
         user_books = db.query(UserBookshelf).filter(
             UserBookshelf.user_id == user_id
         ).all()
@@ -33,34 +36,32 @@ async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Sessi
 
         shelf_book_ids = [ub.book_id for ub in user_books]
 
-        #Get shelf books that have a gutenberg_id
+        #Get books on the shelf that have a gutenberg_id
         shelf_books = db.query(Book).filter(
             Book.book_id.in_(shelf_book_ids),
-            Book.gutenberg_id != None,
-            Book.analysed == True
+            Book.gutenberg_id != None
         ).all()
 
         if not shelf_books:
-            raise HTTPException(status_code=400, detail="No analysed Gutenberg books found on shelf")
+            raise HTTPException(status_code=400, detail="No Gutenberg books found on shelf")
 
         #Get candidate books not on the shelf
         candidates = db.query(Book).filter(
             Book.book_id.notin_(shelf_book_ids),
-            Book.gutenberg_id != None,
-            Book.analysed == True
-        ).limit(50).all()  
+            Book.gutenberg_id != None
+        ).limit(50).all()
 
         if not candidates:
             raise HTTPException(status_code=404, detail="No candidate books found")
 
-        #Fetch shelf book texts from Gutenberg
+        #Fetch book texts from Gutenberg
         print("Fetching shelf book texts...")
         shelf_texts = []
         for book in shelf_books:
             try:
                 text = await gutendex_service.get_book_text(book.gutenberg_id)
                 if text:
-                    shelf_texts.append(text[:100000]) 
+                    shelf_texts.append(text[:100000])
                     print(f"  Got text for: {book.title[:50]}")
             except Exception as e:
                 print(f"  Failed for {book.title}: {e}")
@@ -90,7 +91,7 @@ async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Sessi
         if not candidate_list:
             raise HTTPException(status_code=404, detail="Could not fetch text for any candidate books")
 
-        #Build seed from combined shelf texts
+        #Build a seed from combined shelf texts
         combined_user_text = " ".join(shelf_texts)
         seed = {
             "author": "User Profile",
@@ -101,12 +102,27 @@ async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Sessi
         #Run Burrows' Delta
         results = stylometry_analyser.get_recommendations(seed, candidate_list, top_n=limit)
 
-        #Map results back to book objects
+        #Map the results back to book objects
         title_to_book = {b.title: b for b in candidates}
         response = []
-        for r in results:
+
+        #Clear old recommendations for this user
+        db.query(Recommendation).filter(Recommendation.user_id == user_id).delete()
+
+        for rank, r in enumerate(results, start=1):
             book = title_to_book.get(r["title"])
             if book:
+                # Save to recommendations table
+                rec = Recommendation(
+                    recommendation_id=uuid.uuid4(),
+                    user_id=user_id,
+                    book_id=book.book_id,
+                    similarity_score=r["similarity"],
+                    rank=rank,
+                    generated_at=datetime.utcnow()
+                )
+                db.add(rec)
+
                 response.append(RecommendationResponse(
                     book_id=book.book_id,
                     title=book.title,
@@ -116,6 +132,8 @@ async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Sessi
                     similarity=r["similarity"]
                 ))
 
+        db.commit()
+        print(f"Saved {len(response)} recommendations for user {user_id}")
         return response
 
     except HTTPException:
@@ -124,29 +142,28 @@ async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Sessi
         import traceback
         print(f"RECOMMENDATION ERROR: {str(e)}")
         print(traceback.format_exc())
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Recommendation failed: {str(e)}")
-    
+
+
 @router.get("/{book_id}", response_model=List[RecommendationResponse])
 def get_recommendations(book_id: UUID, limit: int = 10, db: Session = Depends(get_db)):
 
-    #Get the seed book
     seed_book = db.query(Book).filter(Book.book_id == book_id).first()
     if not seed_book:
         raise HTTPException(status_code=404, detail="Book not found")
     if not seed_book.text_source:
         raise HTTPException(status_code=400, detail="Seed book has no text available")
 
-    #Get all other analysed books that have text
     candidates = db.query(Book).filter(
         Book.book_id != book_id,
         Book.analysed == True,
         Book.text_source != None
-    ).limit(500).all()  
+    ).limit(500).all()
 
     if not candidates:
         raise HTTPException(status_code=404, detail="No candidate books found")
 
-    #Build book dicts for the analyser
     seed = {
         "author": seed_book.author,
         "title": seed_book.title,
@@ -157,10 +174,8 @@ def get_recommendations(book_id: UUID, limit: int = 10, db: Session = Depends(ge
         for b in candidates
     ]
 
-    #Run Burrows' Delta recommendations
     results = stylometry_analyser.get_recommendations(seed, candidate_list, top_n=limit)
 
-    #Map titles back to full book objects
     title_to_book = {b.title: b for b in candidates}
     response = []
     for r in results:
@@ -174,15 +189,5 @@ def get_recommendations(book_id: UUID, limit: int = 10, db: Session = Depends(ge
                 delta=r["delta"],
                 similarity=r["similarity"]
             ))
-
-    print(f"Delta results: {results}")
-    print(f"title_to_book keys: {list(title_to_book.keys())[:5]}")
-            
-    results = stylometry_analyser.get_recommendations(seed, candidate_list, top_n=limit)
-
-    print(f"Raw delta results: {results}")
-    print(f"Number of results: {len(results)}")
-    print(f"Candidate titles in map: {list(title_to_book.keys())}")
-
 
     return response

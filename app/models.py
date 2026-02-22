@@ -104,19 +104,19 @@ class Rating(Base):
 #Recommendation table
 class Recommendation(Base):
     __tablename__ = "recommendations"
-    
+
     recommendation_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
-    book_id = Column(UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="CASCADE"), nullable=False)
-    similarity_score = Column(Numeric(5, 4), nullable=False)
-    pacing_similarity = Column(Numeric(5, 4), nullable=True)
-    tone_similarity = Column(Numeric(5, 4), nullable=True)
-    vocabulary_similarity = Column(Numeric(5, 4), nullable=True)
-    sentence_length_similarity = Column(Numeric(5, 4), nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False)
+    book_id = Column(UUID(as_uuid=True), ForeignKey("books.book_id"), nullable=False)
+    similarity_score = Column(Float, nullable=True)
+    pacing_similarity = Column(Float, nullable=True)
+    tone_similarity = Column(Float, nullable=True)
+    vocabulary_similarity = Column(Float, nullable=True)
+    sentence_length_similarity = Column(Float, nullable=True)
     rank = Column(Integer, nullable=True)
-    generated_at = Column(TIMESTAMP, server_default=func.now())
+    generated_at = Column(DateTime, default=datetime.utcnow)
     viewed = Column(Boolean, default=False)
-    viewed_at = Column(TIMESTAMP, nullable=True)
+    viewed_at = Column(DateTime, nullable=True)
     
     #Relationships
     user = relationship("User", back_populates="recommendations")
