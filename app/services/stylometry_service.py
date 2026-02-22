@@ -22,26 +22,23 @@ class StylometryAnalyser:
         return corpus
 
     def get_recommendations(self, seed_book: Dict, candidate_books: List[Dict], top_n: int = 10) -> List[Dict]:
-        #Given a seed book, recommends the most stylistically similar books
-        #Build the train corpus from all candidate books
         train_corpus = self.build_corpus(candidate_books)
-
-        #uild the test corpus from just the seed book
         test_corpus = self.build_corpus([seed_book])
 
-        #Calculate Burrows' Delta
         delta_df = calculate_burrows_delta(train_corpus, test_corpus)
-
-        #delta_df has candidate books as rows and the seed book as column
-        seed_col = delta_df.columns[0]  #The seed book column
+        seed_col = delta_df.columns[0]
 
         results = []
-        for candidate_title, delta_score in delta_df[seed_col].items():
-            #Skip if it's the same book as the seed
+        for candidate_index, delta_score in delta_df[seed_col].items():
+            #Split on " - " and take everything after the first occurrence
+            if " - " in candidate_index:
+                candidate_title = candidate_index.split(" - ", 1)[1]
+            else:
+                candidate_title = candidate_index
+
             if candidate_title == seed_book['title']:
                 continue
 
-            #Convert delta to a 0-1 similarity score
             similarity = round(1 / (1 + delta_score), 4)
 
             results.append({
@@ -50,9 +47,7 @@ class StylometryAnalyser:
                 "similarity": similarity
             })
 
-        #Sort by delta ascending
         results.sort(key=lambda x: x['delta'])
-
         return results[:top_n]
 
     def calculate_delta_between_two(self, book1: Dict, book2: Dict) -> Dict:
