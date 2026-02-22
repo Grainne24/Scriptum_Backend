@@ -49,7 +49,7 @@ async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Sessi
         candidates = db.query(Book).filter(
             Book.book_id.notin_(shelf_book_ids),
             Book.gutenberg_id != None
-        ).limit(50).all()
+        ).limit(20).all()
 
         if not candidates:
             raise HTTPException(status_code=404, detail="No candidate books found")
