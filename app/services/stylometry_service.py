@@ -28,6 +28,9 @@ class StylometryAnalyser:
         delta_df = calculate_burrows_delta(train_corpus, test_corpus)
         seed_col = delta_df.columns[0]
 
+        print(f"Delta columns: {delta_df.columns.tolist()}") 
+        print(f"Delta index: {delta_df.index.tolist()}")
+
         results = []
         for candidate_index, delta_score in delta_df[seed_col].items():
             #Split on " - " and take everything after the first occurrence
@@ -48,6 +51,11 @@ class StylometryAnalyser:
             })
 
         results.sort(key=lambda x: x['delta'])
+
+        results = stylometry_analyser.get_recommendations(seed, candidate_list, top_n=limit)
+        print(f"Raw results: {results}")
+        print(f"title_to_book keys: {list(title_to_book.keys())}")
+
         return results[:top_n]
 
     def calculate_delta_between_two(self, book1: Dict, book2: Dict) -> Dict:
