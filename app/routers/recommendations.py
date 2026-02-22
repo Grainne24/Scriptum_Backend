@@ -26,7 +26,7 @@ class RecommendationResponse(BaseModel):
 @router.get("/for-user/{user_id}", response_model=List[RecommendationResponse])
 async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Session = Depends(get_db)):
     try:
-        #Get the user's bookshelf
+        #Get user's bookshelf
         user_books = db.query(UserBookshelf).filter(
             UserBookshelf.user_id == user_id
         ).all()
@@ -36,62 +36,84 @@ async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Sessi
 
         shelf_book_ids = [ub.book_id for ub in user_books]
 
-        #Get books on the shelf that have a gutenberg_id
+        #Get shelf books that have cached text
         shelf_books = db.query(Book).filter(
             Book.book_id.in_(shelf_book_ids),
-            Book.gutenberg_id != None
+            Book.text_content != None
         ).all()
 
+        #Fallback: if no cached text, try fetching live from Gutenberg
         if not shelf_books:
-            raise HTTPException(status_code=400, detail="No Gutenberg books found on shelf")
+            shelf_books_no_text = db.query(Book).filter(
+                Book.book_id.in_(shelf_book_ids),
+                Book.gutenberg_id != None
+            ).all()
 
-        #Get candidate books not on the shelf
+            if not shelf_books_no_text:
+                raise HTTPException(status_code=400, detail="No Gutenberg books found on shelf. Add books from the search page.")
+
+            print("No cached text found for shelf books, fetching from Gutenberg...")
+            for book in shelf_books_no_text:
+                text = await gutendex_service.get_book_text(book.gutenberg_id)
+                if text:
+                    book.text_content = text[:150000]
+            db.commit()
+
+            shelf_books = db.query(Book).filter(
+                Book.book_id.in_(shelf_book_ids),
+                Book.text_content != None
+            ).all()
+
+        if not shelf_books:
+            raise HTTPException(status_code=400, detail="Could not fetch text for your shelf books")
+
+        #Get candidate books with cached text (not on shelf)
         candidates = db.query(Book).filter(
             Book.book_id.notin_(shelf_book_ids),
-            Book.gutenberg_id != None
+            Book.text_content != None
         ).limit(20).all()
 
+        #Fallback: fetch live if no cached candidates
         if not candidates:
-            raise HTTPException(status_code=404, detail="No candidate books found")
+            candidates_no_text = db.query(Book).filter(
+                Book.book_id.notin_(shelf_book_ids),
+                Book.gutenberg_id != None
+            ).limit(10).all()
 
-        #Fetch book texts from Gutenberg
-        print("Fetching shelf book texts...")
-        shelf_texts = []
-        for book in shelf_books:
-            try:
+            if not candidates_no_text:
+                raise HTTPException(status_code=404, detail="No candidate books found. Import more books.")
+
+            print("No cached candidates, fetching from Gutenberg...")
+            for book in candidates_no_text:
                 text = await gutendex_service.get_book_text(book.gutenberg_id)
                 if text:
-                    shelf_texts.append(text[:100000])
-                    print(f"  Got text for: {book.title[:50]}")
-            except Exception as e:
-                print(f"  Failed for {book.title}: {e}")
-                continue
+                    book.text_content = text[:150000]
+            db.commit()
 
-        if not shelf_texts:
-            raise HTTPException(status_code=400, detail="Could not fetch text for any shelf books")
+            candidates = db.query(Book).filter(
+                Book.book_id.notin_(shelf_book_ids),
+                Book.text_content != None
+            ).limit(20).all()
 
-        #Fetch candidate book texts from Gutenberg
-        print("Fetching candidate book texts...")
-        candidate_list = []
-        for book in candidates:
-            try:
-                text = await gutendex_service.get_book_text(book.gutenberg_id)
-                if text:
-                    candidate_list.append({
-                        "author": book.author,
-                        "title": book.title,
-                        "text": text[:30000],
-                        "book_id": str(book.book_id)
-                    })
-                    print(f"  Got text for: {book.title[:50]}")
-            except Exception as e:
-                print(f"  Failed for {book.title}: {e}")
-                continue
+        if not candidates:
+            raise HTTPException(status_code=404, detail="Could not get text for candidate books")
 
-        if not candidate_list:
-            raise HTTPException(status_code=404, detail="Could not fetch text for any candidate books")
+        #Build shelf texts from cached content — no Gutenberg calls needed
+        shelf_texts = [book.text_content for book in shelf_books]
+        print(f"Using cached text for {len(shelf_texts)} shelf books")
 
-        #Build a seed from combined shelf texts
+        candidate_list = [
+            {
+                "author": book.author,
+                "title": book.title,
+                "text": book.text_content,
+                "book_id": str(book.book_id)
+            }
+            for book in candidates
+        ]
+        print(f"Using cached text for {len(candidate_list)} candidate books")
+
+        #Build seed from combined shelf texts
         combined_user_text = " ".join(shelf_texts)
         seed = {
             "author": "User Profile",
@@ -102,7 +124,7 @@ async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Sessi
         #Run Burrows' Delta
         results = stylometry_analyser.get_recommendations(seed, candidate_list, top_n=limit)
 
-        #Map the results back to book objects
+        #Map results back to book objects and save to recommendations table
         title_to_book = {b.title: b for b in candidates}
         response = []
 
@@ -112,7 +134,6 @@ async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Sessi
         for rank, r in enumerate(results, start=1):
             book = title_to_book.get(r["title"])
             if book:
-                # Save to recommendations table
                 rec = Recommendation(
                     recommendation_id=uuid.uuid4(),
                     user_id=user_id,
@@ -144,7 +165,6 @@ async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Sessi
         print(traceback.format_exc())
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Recommendation failed: {str(e)}")
-
 
 @router.get("/{book_id}", response_model=List[RecommendationResponse])
 def get_recommendations(book_id: UUID, limit: int = 10, db: Session = Depends(get_db)):
