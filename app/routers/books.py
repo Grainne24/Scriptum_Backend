@@ -634,6 +634,39 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to import book: {str(e)}"
         )
+    
+@router.post("/backfill-texts")
+async def backfill_book_texts(db: Session = Depends(get_db)):
+    books = db.query(Book).filter(
+        Book.text_file_path != None,
+        Book.text_content == None 
+    ).all()
+
+    print(f"Found {len(books)} books to backfill")
+    count = 0
+    failed = 0
+
+    for book in books:
+        try:
+            gutenberg_id = extract_gutenberg_id(book.text_file_path)
+            text = await gutendex_service.get_book_text(gutenberg_id)
+            if text:
+                book.text_content = text[:150000]  # cap at 150k chars
+                count += 1
+                print(f"  Backfilled: {book.title}")
+            else:
+                failed += 1
+                print(f"  No text found: {book.title}")
+        except Exception as e:
+            failed += 1
+            print(f"  Failed: {book.title} — {e}")
+            continue
+
+    db.commit()
+    return {
+        "message": f"Backfilled {count} books, {failed} failed",
+        "total": len(books)
+    }
 
 @router.get("/{book_id}", response_model=BookResponse)
 def get_book(book_id: UUID, db: Session = Depends(get_db)):
@@ -691,39 +724,6 @@ def extract_gutenberg_id(text_file_path: str) -> int:
         if match:
             return int(match.group(1))
     raise ValueError(f"Cannot extract Gutenberg ID from: {text_file_path}")
-
-@router.post("/backfill-texts")
-async def backfill_book_texts(db: Session = Depends(get_db)):
-    books = db.query(Book).filter(
-        Book.text_file_path != None,
-        Book.text_content == None 
-    ).all()
-
-    print(f"Found {len(books)} books to backfill")
-    count = 0
-    failed = 0
-
-    for book in books:
-        try:
-            gutenberg_id = extract_gutenberg_id(book.text_file_path)
-            text = await gutendex_service.get_book_text(gutenberg_id)
-            if text:
-                book.text_content = text[:150000]  # cap at 150k chars
-                count += 1
-                print(f"  Backfilled: {book.title}")
-            else:
-                failed += 1
-                print(f"  No text found: {book.title}")
-        except Exception as e:
-            failed += 1
-            print(f"  Failed: {book.title} — {e}")
-            continue
-
-    db.commit()
-    return {
-        "message": f"Backfilled {count} books, {failed} failed",
-        "total": len(books)
-    }
 
 @router.get("/recommendations/{book_id}")
 async def get_book_recommendations(
