@@ -44,6 +44,7 @@ class Book(Base):
     text_source = Column(String(100), nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
     analysed = Column(Boolean, default=False, index=True)
+    text_content = Column(Text, nullable=True)
     
     # Relationships
     stylometric_profile = relationship("StylometricProfile", back_populates="book", uselist=False, cascade="all, delete-orphan")
