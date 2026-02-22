@@ -22,28 +22,30 @@ class StylometryAnalyser:
         return corpus
 
     def get_recommendations(self, seed_book: Dict, candidate_books: List[Dict], top_n: int = 10) -> List[Dict]:
+        print(f"get_recommendations called with {len(candidate_books)} candidates")
         train_corpus = self.build_corpus(candidate_books)
         test_corpus = self.build_corpus([seed_book])
-
         delta_df = calculate_burrows_delta(train_corpus, test_corpus)
         seed_col = delta_df.columns[0]
 
-        print(f"Delta columns: {delta_df.columns.tolist()}") 
+        print(f"Delta columns: {delta_df.columns.tolist()}")
         print(f"Delta index: {delta_df.index.tolist()}")
 
+        #Build author -> title lookup from candidate_books
+        author_to_title = {book['author']: book['title'] for book in candidate_books}
+
         results = []
-        for candidate_index, delta_score in delta_df[seed_col].items():
-            #Split on " - " and take everything after the first occurrence
-            if " - " in candidate_index:
-                candidate_title = candidate_index.split(" - ", 1)[1]
-            else:
-                candidate_title = candidate_index
+        for candidate_author, delta_score in delta_df[seed_col].items():
+            #Look up title from author
+            candidate_title = author_to_title.get(candidate_author)
+            if not candidate_title:
+                print(f"No title found for author: {candidate_author}")
+                continue
 
             if candidate_title == seed_book['title']:
                 continue
 
             similarity = round(1 / (1 + delta_score), 4)
-
             results.append({
                 "title": candidate_title,
                 "delta": round(float(delta_score), 4),
@@ -51,11 +53,7 @@ class StylometryAnalyser:
             })
 
         results.sort(key=lambda x: x['delta'])
-
-        results = stylometry_analyser.get_recommendations(seed, candidate_list, top_n=limit)
-        print(f"Raw results: {results}")
-        print(f"title_to_book keys: {list(title_to_book.keys())}")
-
+        print(f"Returning {len(results)} results")
         return results[:top_n]
 
     def calculate_delta_between_two(self, book1: Dict, book2: Dict) -> Dict:
