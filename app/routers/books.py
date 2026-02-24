@@ -317,6 +317,47 @@ async def add_to_bookshelf(
             detail=f"Failed to add book: {str(e)}"
         )
     
+
+@router.post("/my-bookshelf/{book_id}/rating")
+def save_book_rating(
+    book_id: UUID,
+    user_id: str,
+    rating: float,
+    db: Session = Depends(get_db)
+):
+    try:
+        user_uuid = UUID(user_id)
+
+        #Check if a rating already exists
+        existing_rating = db.query(Rating).filter(
+            Rating.user_id == user_uuid,
+            Rating.book_id == book_id
+        ).first()
+
+        if existing_rating:
+            existing_rating.rating = rating
+            existing_rating.updated_at = datetime.utcnow()
+        else:
+            new_rating = Rating(
+                user_id=user_uuid,
+                book_id=book_id,
+                rating=rating
+            )
+            db.add(new_rating)
+
+        db.commit()
+        print(f"Saved rating {rating} for book {book_id} by user {user_uuid}")
+        return {"message": f"Rating saved: {rating}"}
+
+    except Exception as e:
+        db.rollback()
+        print(f"Error saving rating: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save rating: {str(e)}"
+        )
+    
+    
 @router.put("/my-bookshelf/{book_id}")
 def update_bookshelf_entry(
     book_id: UUID,
@@ -326,37 +367,45 @@ def update_bookshelf_entry(
 ):
     try:
         user_uuid = UUID(user_id)
-        
+
         bookshelf_entry = db.query(UserBookshelf).filter(
             UserBookshelf.user_id == user_uuid,
             UserBookshelf.book_id == book_id
         ).first()
-        
+
         if not bookshelf_entry:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Book not in bookshelf"
             )
-        
-        update_dict = update_data.model_dump(exclude_unset=True)
-        for key, value in update_dict.items():
-            setattr(bookshelf_entry, key, value)
-        
+
+        if update_data.book_status is not None:
+            bookshelf_entry.book_status = update_data.book_status
+        if update_data.comments is not None:
+            bookshelf_entry.comments = update_data.comments
+        if update_data.date_started is not None:
+            bookshelf_entry.date_started = update_data.date_started
+        if update_data.date_ended is not None:
+            bookshelf_entry.date_ended = update_data.date_ended
+
         db.commit()
         db.refresh(bookshelf_entry)
-        
+
+        print(f"Updated bookshelf entry for book {book_id}: status={bookshelf_entry.book_status}, comments={bookshelf_entry.comments}")
+
         return {
             "message": "Bookshelf entry updated successfully",
             "book_status": bookshelf_entry.book_status,
             "comments": bookshelf_entry.comments,
-            "date_started": bookshelf_entry.date_started,
-            "date_ended": bookshelf_entry.date_ended
+            "date_started": str(bookshelf_entry.date_started) if bookshelf_entry.date_started else None,
+            "date_ended": str(bookshelf_entry.date_ended) if bookshelf_entry.date_ended else None
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
+        print(f"Error updating bookshelf entry: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update bookshelf entry: {str(e)}"
@@ -919,97 +968,4 @@ async def get_book_recommendations(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get recommendations: {str(e)}"
-        )
-    
-   
-@router.post("/my-bookshelf/{book_id}/rating")
-def save_book_rating(
-    book_id: UUID,
-    user_id: str,
-    rating: float,
-    db: Session = Depends(get_db)
-):
-    try:
-        user_uuid = UUID(user_id)
-
-        #Check if a rating already exists
-        existing_rating = db.query(Rating).filter(
-            Rating.user_id == user_uuid,
-            Rating.book_id == book_id
-        ).first()
-
-        if existing_rating:
-            existing_rating.rating = rating
-            existing_rating.updated_at = datetime.utcnow()
-        else:
-            new_rating = Rating(
-                user_id=user_uuid,
-                book_id=book_id,
-                rating=rating
-            )
-            db.add(new_rating)
-
-        db.commit()
-        print(f"Saved rating {rating} for book {book_id} by user {user_uuid}")
-        return {"message": f"Rating saved: {rating}"}
-
-    except Exception as e:
-        db.rollback()
-        print(f"Error saving rating: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save rating: {str(e)}"
-        )
-    
-@router.put("/my-bookshelf/{book_id}")
-def update_bookshelf_entry(
-    book_id: UUID,
-    user_id: str,
-    update_data: UserBookshelfUpdate,
-    db: Session = Depends(get_db)
-):
-    try:
-        user_uuid = UUID(user_id)
-
-        bookshelf_entry = db.query(UserBookshelf).filter(
-            UserBookshelf.user_id == user_uuid,
-            UserBookshelf.book_id == book_id
-        ).first()
-
-        if not bookshelf_entry:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Book not in bookshelf"
-            )
-
-        if update_data.book_status is not None:
-            bookshelf_entry.book_status = update_data.book_status
-        if update_data.comments is not None:
-            bookshelf_entry.comments = update_data.comments
-        if update_data.date_started is not None:
-            bookshelf_entry.date_started = update_data.date_started
-        if update_data.date_ended is not None:
-            bookshelf_entry.date_ended = update_data.date_ended
-
-        db.commit()
-        db.refresh(bookshelf_entry)
-
-        print(f"Updated bookshelf entry for book {book_id}: status={bookshelf_entry.book_status}, comments={bookshelf_entry.comments}")
-
-        return {
-            "message": "Bookshelf entry updated successfully",
-            "book_status": bookshelf_entry.book_status,
-            "comments": bookshelf_entry.comments,
-            "date_started": str(bookshelf_entry.date_started) if bookshelf_entry.date_started else None,
-            "date_ended": str(bookshelf_entry.date_ended) if bookshelf_entry.date_ended else None
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        print(f"Error updating bookshelf entry: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update bookshelf entry: {str(e)}"
         )
