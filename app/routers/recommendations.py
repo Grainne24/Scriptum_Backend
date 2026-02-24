@@ -67,7 +67,7 @@ async def get_recommendations_for_user(user_id: UUID, limit: int = 10, db: Sessi
         if not shelf_books:
             raise HTTPException(status_code=400, detail="Could not fetch text for your shelf books")
 
-        #Get candidate books with cached text (not on shelf)
+        #Get candidate books with cached text
         candidates = db.query(Book).filter(
             Book.book_id.notin_(shelf_book_ids),
             Book.text_content != None
