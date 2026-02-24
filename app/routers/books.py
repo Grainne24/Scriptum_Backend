@@ -921,6 +921,46 @@ async def get_book_recommendations(
             detail=f"Failed to get recommendations: {str(e)}"
         )
     
+   
+@router.post("/my-bookshelf/{book_id}/rating")
+def save_book_rating(
+    book_id: UUID,
+    user_id: str,
+    rating: float,
+    db: Session = Depends(get_db)
+):
+    try:
+        user_uuid = UUID(user_id)
+
+        #Check if a rating already exists
+        existing_rating = db.query(Rating).filter(
+            Rating.user_id == user_uuid,
+            Rating.book_id == book_id
+        ).first()
+
+        if existing_rating:
+            existing_rating.rating = rating
+            existing_rating.updated_at = datetime.utcnow()
+        else:
+            new_rating = Rating(
+                user_id=user_uuid,
+                book_id=book_id,
+                rating=rating
+            )
+            db.add(new_rating)
+
+        db.commit()
+        print(f"Saved rating {rating} for book {book_id} by user {user_uuid}")
+        return {"message": f"Rating saved: {rating}"}
+
+    except Exception as e:
+        db.rollback()
+        print(f"Error saving rating: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save rating: {str(e)}"
+        )
+    
 @router.put("/my-bookshelf/{book_id}")
 def update_bookshelf_entry(
     book_id: UUID,
@@ -972,43 +1012,4 @@ def update_bookshelf_entry(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update bookshelf entry: {str(e)}"
-        )
-    
-@router.post("/my-bookshelf/{book_id}/rating")
-def save_book_rating(
-    book_id: UUID,
-    user_id: str,
-    rating: float,
-    db: Session = Depends(get_db)
-):
-    try:
-        user_uuid = UUID(user_id)
-
-        # Check if a rating already exists
-        existing_rating = db.query(Rating).filter(
-            Rating.user_id == user_uuid,
-            Rating.book_id == book_id
-        ).first()
-
-        if existing_rating:
-            existing_rating.rating = rating
-            existing_rating.updated_at = datetime.utcnow()
-        else:
-            new_rating = Rating(
-                user_id=user_uuid,
-                book_id=book_id,
-                rating=rating
-            )
-            db.add(new_rating)
-
-        db.commit()
-        print(f"Saved rating {rating} for book {book_id} by user {user_uuid}")
-        return {"message": f"Rating saved: {rating}"}
-
-    except Exception as e:
-        db.rollback()
-        print(f"Error saving rating: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save rating: {str(e)}"
         )
