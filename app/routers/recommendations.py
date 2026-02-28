@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Book, UserBookshelf, Recommendation
+from app.models import Book, StylometricProfile, UserBookshelf, BookSimilarity
 from app.services.stylometry_service import stylometry_analyser
 from app.services.gutendex_service import gutendex_service
 from pydantic import BaseModel
