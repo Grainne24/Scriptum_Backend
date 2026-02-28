@@ -965,3 +965,26 @@ async def get_book_recommendations(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get recommendations: {str(e)}"
         )
+    
+@router.post("/bulk-analyse")
+def bulk_analyse_books(
+    limit: int = 50,
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db)
+):
+    books_to_analyse = db.query(Book).filter(
+        Book.text_content.isnot(None),
+        Book.analysed == False
+    ).limit(limit).all()
+
+    print(f"Found {len(books_to_analyse)} books to analyse")
+
+    queued = []
+    for book in books_to_analyse:
+        background_tasks.add_task(analyse_book_background, book.book_id)
+        queued.append(book.title)
+
+    return {
+        "message": f"Queued {len(queued)} books for analysis",
+        "queued": queued
+    }
