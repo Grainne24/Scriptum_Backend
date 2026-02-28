@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
-from datetime import date
+from datetime import date, datetime
 
 from app.database import get_db, SessionLocal
 from app.models import Book, StylometricProfile, UserBookshelf, BookSimilarity, Rating
