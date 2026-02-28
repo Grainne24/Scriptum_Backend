@@ -49,6 +49,8 @@ def get_my_bookshelf(
                 "author": book.author,
                 "publication_year": book.publication_year,
                 "created_at": book.created_at,
+                "rating": float(bookshelf_entry.rating) if bookshelf_entry.rating else None,
+                "rated_at": str(bookshelf_entry.rated_at) if bookshelf_entry.rated_at else None,
                 "analysed": book.analysed if book.analysed is not None else False,
                 "cover_url": book.cover_url,
                 "summary": book.summary,
@@ -327,35 +329,28 @@ def save_book_rating(
 ):
     try:
         user_uuid = UUID(user_id)
-
-        #Check if a rating already exists
-        existing_rating = db.query(Rating).filter(
-            Rating.user_id == user_uuid,
-            Rating.book_id == book_id
+        bookshelf_entry = db.query(UserBookshelf).filter(
+            UserBookshelf.user_id == user_uuid,
+            UserBookshelf.book_id == book_id
         ).first()
 
-        if existing_rating:
-            existing_rating.rating = rating
-            existing_rating.updated_at = datetime.utcnow()
-        else:
-            new_rating = Rating(
-                user_id=user_uuid,
-                book_id=book_id,
-                rating=rating
-            )
-            db.add(new_rating)
+        if not bookshelf_entry:
+            raise HTTPException(status_code=404, detail="Book not in bookshelf")
 
+        bookshelf_entry.rating = rating
+        bookshelf_entry.rated_at = datetime.utcnow()
+        bookshelf_entry.updated_at = datetime.utcnow()
         db.commit()
-        print(f"Saved rating {rating} for book {book_id} by user {user_uuid}")
+
+        print(f"Saved rating {rating} for book {book_id}")
         return {"message": f"Rating saved: {rating}"}
 
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         print(f"Error saving rating: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save rating: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to save rating: {str(e)}")
     
     
 @router.put("/my-bookshelf/{book_id}")

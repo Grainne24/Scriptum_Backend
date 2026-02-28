@@ -62,6 +62,9 @@ class UserBookshelf(Base):
     comments = Column(Text, nullable=True)
     date_started = Column(Date, nullable=True)
     date_ended = Column(Date, nullable=True)
+    rating = Column(Numeric(3, 2), nullable=True)
+    rated_at = Column(TIMESTAMP, nullable=True)
+    updated_at = Column(TIMESTAMP, nullable=True)
 
 #Stylometric profile table
 class StylometricProfile(Base):
