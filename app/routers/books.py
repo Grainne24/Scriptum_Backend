@@ -713,6 +713,29 @@ async def backfill_book_texts(db: Session = Depends(get_db)):
         "total": len(books)
     }
 
+@router.post("/bulk-analyse")
+def bulk_analyse_books(
+    limit: int = 50,
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db)
+):
+    books_to_analyse = db.query(Book).filter(
+        Book.text_content.isnot(None),
+        Book.analysed == False
+    ).limit(limit).all()
+
+    print(f"Found {len(books_to_analyse)} books to analyse")
+
+    queued = []
+    for book in books_to_analyse:
+        background_tasks.add_task(analyse_book_background, book.book_id)
+        queued.append(book.title)
+
+    return {
+        "message": f"Queued {len(queued)} books for analysis",
+        "queued": queued
+    }
+
 @router.get("/{book_id}", response_model=BookResponse)
 def get_book(book_id: UUID, db: Session = Depends(get_db)):
     book = db.query(Book).filter(Book.book_id == book_id).first()
@@ -966,25 +989,3 @@ async def get_book_recommendations(
             detail=f"Failed to get recommendations: {str(e)}"
         )
     
-@router.post("/bulk-analyse")
-def bulk_analyse_books(
-    limit: int = 50,
-    background_tasks: BackgroundTasks = None,
-    db: Session = Depends(get_db)
-):
-    books_to_analyse = db.query(Book).filter(
-        Book.text_content.isnot(None),
-        Book.analysed == False
-    ).limit(limit).all()
-
-    print(f"Found {len(books_to_analyse)} books to analyse")
-
-    queued = []
-    for book in books_to_analyse:
-        background_tasks.add_task(analyse_book_background, book.book_id)
-        queued.append(book.title)
-
-    return {
-        "message": f"Queued {len(queued)} books for analysis",
-        "queued": queued
-    }
