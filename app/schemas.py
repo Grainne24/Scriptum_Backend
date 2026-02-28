@@ -63,6 +63,11 @@ class BookResponse(BookBase):
     avg_sentence_length: Optional[float] = None
     avg_word_length: Optional[float] = None
     lexical_diversity: Optional[float] = None
+    rating: Optional[float] = None
+    rated_at: Optional[str] = None
+    comments: Optional[str] = None
+    date_started: Optional[date] = None
+    date_ended: Optional[date] = None
     
     model_config = ConfigDict(from_attributes=True)
 

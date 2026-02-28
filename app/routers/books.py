@@ -549,6 +549,7 @@ def get_bookshelf_books(limit: int = 10, db: Session = Depends(get_db)):
                 "title": book.title,
                 "author": book.author,
                 "publication_year": book.publication_year,
+                "rating": float(bookshelf_entry.rating) if bookshelf_entry.rating else None,
                 "created_at": book.created_at,
                 "analysed": book.analysed if book.analysed is not None else False,
                 "cover_url": book.cover_url,
