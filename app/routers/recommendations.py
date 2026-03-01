@@ -115,6 +115,37 @@ def get_recommendations_for_user(
             detail=f"Failed to get recommendations: {str(e)}"
         )
 
+@router.post("/not-interested/{user_id}/{book_id}")
+def mark_not_interested(
+    user_id: str,
+    book_id: UUID,
+    db: Session = Depends(get_db)
+):
+    try:
+        user_uuid = UUID(user_id)
+        
+        existing = db.query(UserBookshelf).filter(
+            UserBookshelf.user_id == user_uuid,
+            UserBookshelf.book_id == book_id
+        ).first()
+        
+        if existing:
+            existing.book_status = "not_interested"
+            db.commit()
+        else:
+            entry = UserBookshelf(
+                user_id=user_uuid,
+                book_id=book_id,
+                book_status="not_interested"
+            )
+            db.add(entry)
+            db.commit()
+        
+        return {"message": "Marked as not interested"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/{book_id}", response_model=List[RecommendationResponse])
 def get_recommendations(book_id: UUID, limit: int = 10, db: Session = Depends(get_db)):
 
