@@ -549,7 +549,6 @@ def get_bookshelf_books(limit: int = 10, db: Session = Depends(get_db)):
                 "title": book.title,
                 "author": book.author,
                 "publication_year": book.publication_year,
-                "rating": float(bookshelf_entry.rating) if bookshelf_entry.rating else None,
                 "created_at": book.created_at,
                 "analysed": book.analysed if book.analysed is not None else False,
                 "cover_url": book.cover_url,
@@ -721,7 +720,7 @@ def bulk_analyse_books(
 ):
     books_to_analyse = db.query(Book).filter(
         Book.text_content.isnot(None),
-        Book.analysed == False
+        (Book.analysed == False) | (Book.analysed == None)
     ).limit(limit).all()
 
     print(f"Found {len(books_to_analyse)} books to analyse")
