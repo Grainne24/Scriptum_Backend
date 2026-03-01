@@ -190,6 +190,8 @@ def analyse_book_background(book_id: UUID):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         text = loop.run_until_complete(gutendex_service.get_book_text(gutenberg_id))
+        if text:
+            text = text[:50000]  #Only need first 50k chars for stylometry
         loop.close()
         
         if not text:
