@@ -719,8 +719,8 @@ def bulk_analyse_books(
     db: Session = Depends(get_db)
 ):
     books_to_analyse = db.query(Book).filter(
-        Book.text_content.isnot(None),
-        (Book.analysed == False) | (Book.analysed == None)
+        Book.text_file_path.isnot(None),
+        (Book.analysed == False) | (Book.analysed.is_(None))
     ).limit(limit).all()
 
     print(f"Found {len(books_to_analyse)} books to analyse")
