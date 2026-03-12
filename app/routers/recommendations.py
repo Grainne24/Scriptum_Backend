@@ -1,17 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Book, StylometricProfile, UserBookshelf, BookSimilarity
+from app.models import Book, StylometricProfile, UserBookshelf, BookSimilarity, Recommendation
 from app.services.stylometry_service import stylometry_analyser
 from app.services.gutendex_service import gutendex_service
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.feedback_weights import calculate_feedback_adjustment
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
+
+CACHE_TTL_HOURS = 24
 
 class RecommendationResponse(BaseModel):
     book_id: UUID
@@ -23,6 +25,86 @@ class RecommendationResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+def get_cached_recommendations(user_uuid: UUID, db: Session) -> Optional[list]:
+    cutoff = datetime.utcnow() - timedelta(hours=CACHE_TTL_HOURS)
+
+    rows = (
+        db.query(Recommendation, Book)
+        .join(Book, Recommendation.book_id == Book.book_id)
+        .filter(
+            Recommendation.user_id == user_uuid,
+            Recommendation.generated_at >= cutoff
+        )
+        .order_by(Recommendation.rank.asc())
+        .all()
+    )
+
+    if not rows:
+        return None
+    return [
+        {
+            "book_id": str(rec.book_id),
+            "title": book.title,
+            "author": book.author,
+            "cover_url": book.cover_url,
+            "summary": book.summary,
+            "delta": rec.similarity_score or 0.0,
+            "similarity": rec.similarity_score or 0.0,
+            "feedback_adjustment": 0.0,
+            "pacing_score": None,
+            "tone_score": None,
+            "vocabulary_richness": None,
+        }
+        for rec, book in rows
+    ]
+
+
+def save_recommendations(user_uuid: UUID, scored: list, db: Session):
+    db.query(Recommendation).filter(Recommendation.user_id == user_uuid).delete()
+
+    for rank, item in enumerate(scored, start=1):
+        rec = Recommendation(
+            recommendation_id=uuid.uuid4(),
+            user_id=user_uuid,
+            book_id=UUID(item["book_id"]),
+            similarity_score=item["similarity"],
+            rank=rank,
+            generated_at=datetime.utcnow()
+        )
+        db.add(rec)
+
+    db.commit()
+
+
+def invalidate_cache(user_uuid: UUID, db: Session):
+
+    db.query(Recommendation).filter(Recommendation.user_id == user_uuid).delete()
+    db.commit()
+
+
+def reorder_cache(user_uuid: UUID, book_id: UUID, adjustment: float, db: Session):
+    row = db.query(Recommendation).filter(
+        Recommendation.user_id == user_uuid,
+        Recommendation.book_id == book_id
+    ).first()
+
+    if row is None:
+        return
+
+    row.similarity_score = round((row.similarity_score or 0.0) + adjustment, 4)
+    db.flush()
+
+    all_rows = (
+        db.query(Recommendation)
+        .filter(Recommendation.user_id == user_uuid)
+        .order_by(Recommendation.similarity_score.desc())
+        .all()
+    )
+
+    for new_rank, r in enumerate(all_rows, start=1):
+        r.rank = new_rank
+
+    db.commit()
 
 @router.get("/for-user/{user_id}")
 def get_recommendations_for_user(
@@ -32,6 +114,13 @@ def get_recommendations_for_user(
 ):
     try:
         user_uuid = UUID(user_id)
+
+        cached = get_cached_recommendations(user_uuid, db)
+        if cached is not None:
+            print(f"Returning {len(cached)} cached recs for user {user_id}")
+            return cached[:limit]
+
+        print(f"Computing fresh recommendations for user {user_id}")
 
         rated_entries = db.query(UserBookshelf).filter(
             UserBookshelf.user_id == user_uuid,
@@ -84,8 +173,7 @@ def get_recommendations_for_user(
                     base_score = max(base_score, cached_sim.similarity_score)
 
             feedback_adj = calculate_feedback_adjustment(profile, user_rated_books)
-
-            final_score = (base_score * 2) + feedback_adj 
+            final_score = (base_score * 2) + feedback_adj
 
             scored.append({
                 "book_id": str(book.book_id),
@@ -103,7 +191,9 @@ def get_recommendations_for_user(
 
         scored.sort(key=lambda x: x["similarity"], reverse=True)
 
-        print(f"Returning top {limit} recommendations")
+        save_recommendations(user_uuid, scored, db)
+        print(f"[CACHE SAVED] {len(scored)} recommendations saved for user {user_id}")
+
         return scored[:limit]
 
     except Exception as e:
@@ -115,6 +205,21 @@ def get_recommendations_for_user(
             detail=f"Failed to get recommendations: {str(e)}"
         )
 
+
+@router.post("/interested/{user_id}/{book_id}")
+def mark_interested(
+    user_id: str,
+    book_id: UUID,
+    db: Session = Depends(get_db)
+):
+    try:
+        user_uuid = UUID(user_id)
+        reorder_cache(user_uuid, book_id, adjustment=+0.25, db=db)
+        return {"message": "Marked as interested"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/not-interested/{user_id}/{book_id}")
 def mark_not_interested(
     user_id: str,
@@ -123,12 +228,14 @@ def mark_not_interested(
 ):
     try:
         user_uuid = UUID(user_id)
-        
+
+        reorder_cache(user_uuid, book_id, adjustment=-0.5, db=db)
+
         existing = db.query(UserBookshelf).filter(
             UserBookshelf.user_id == user_uuid,
             UserBookshelf.book_id == book_id
         ).first()
-        
+
         if existing:
             existing.book_status = "not_interested"
             db.commit()
@@ -140,10 +247,18 @@ def mark_not_interested(
             )
             db.add(entry)
             db.commit()
-        
+
         return {"message": "Marked as not interested"}
     except Exception as e:
         db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/refresh/{user_id}")
+def refresh_recommendations(user_id: str, db: Session = Depends(get_db)):
+    try:
+        invalidate_cache(UUID(user_id), db)
+        return {"message": "Cache cleared"}
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{book_id}", response_model=List[RecommendationResponse])

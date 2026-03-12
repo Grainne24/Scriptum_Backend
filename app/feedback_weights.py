@@ -6,10 +6,8 @@ RATING_WEIGHTS = {
     5:  2,
 }
 
-
 def get_rating_weight(rating: float) -> int:
     return RATING_WEIGHTS.get(round(rating), 0)
-
 
 def calculate_stylometric_distance(profile_a, profile_b) -> float:
     features = [
