@@ -737,6 +737,45 @@ def bulk_analyse_books(
         "queued": queued
     }
 
+@router.get("/{book_id}/stylometric-profile")
+def get_stylometric_profile(
+    book_id: UUID,
+    db: Session = Depends(get_db)
+):
+    try:
+        profile = db.query(StylometricProfile).filter(
+            StylometricProfile.book_id == book_id
+        ).first()
+
+        if not profile:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Stylometric profile not found for this book"
+            )
+
+        return {
+            "pacing_score":        float(profile.pacing_score or 0),
+            "tone_score":          float(profile.tone_score or 0),
+            "vocabulary_richness": float(profile.vocabulary_richness or 0),
+            "avg_sentence_length": float(profile.avg_sentence_length or 0),
+            "avg_word_length":     float(profile.avg_word_length or 0),
+            "lexical_diversity":   float(profile.lexical_diversity or 0),
+            "punctuation_density": float(profile.punctuation_density or 0) if profile.punctuation_density else 0.0,
+            "dialogue_percentage": float(profile.dialogue_percentage or 0) if profile.dialogue_percentage else 0.0,
+            "total_words":         profile.total_words or 0,
+            "total_sentences":     profile.total_sentences or 0,
+            "unique_words":        profile.unique_words or 0
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching stylometric profile: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch stylometric profile: {str(e)}"
+        )
+
 @router.get("/{book_id}", response_model=BookResponse)
 def get_book(book_id: UUID, db: Session = Depends(get_db)):
     book = db.query(Book).filter(Book.book_id == book_id).first()
