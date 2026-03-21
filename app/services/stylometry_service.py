@@ -89,23 +89,53 @@ class StylometryAnalyser:
         lexical_diversity = unique_words / total_words if total_words > 0 else 0
 
         #Pacing score
-        if total_sentences > 1:
-            sentence_lengths = [len(s.split()) for s in sentences]
-            avg_len = sum(sentence_lengths) / len(sentence_lengths)
-            variance = sum((x - avg_len) ** 2 for x in sentence_lengths) / len(sentence_lengths)
-            std_dev = math.sqrt(variance)
-            cv = (std_dev / avg_len * 100) if avg_len > 0 else 0
-            pacing_score = min(100, cv)
-        else:
-            pacing_score = 50.0
+        action_verbs = {
+            'ran', 'rushed', 'jumped', 'grabbed', 'shouted', 'screamed',
+            'fled', 'attacked', 'burst', 'crashed', 'dashed', 'seized',
+            'struck', 'fell', 'shot', 'threw', 'leapt', 'sprinted',
+            'escaped', 'exploded', 'charged', 'spun', 'ducked', 'swung'
+        }
+        words_lower = [w.lower() for w in words]
+        action_verb_density = sum(1 for w in words_lower if w in action_verbs) / total_words if total_words > 0 else 0
+
+        #Sentence length component
+        sentence_length_pacing = max(0, 100 - (avg_sentence_length * 2.5))
+
+        #Combine the two so 70% is sentence length and 30% action verb density
+        pacing_score = min(100, (sentence_length_pacing * 0.7) + (action_verb_density * 3000 * 0.3))
 
         #Tone score
-        exclamation_count = text.count('!')
-        question_count = text.count('?')
-        emotional_punctuation = exclamation_count + question_count
-        tone_score = min(100, (emotional_punctuation / total_sentences) * 50) if total_sentences > 0 else 0
+        dark_words = {
+            'death', 'dead', 'die', 'died', 'kill', 'killed', 'murder', 'blood',
+            'darkness', 'shadow', 'despair', 'grief', 'sorrow', 'fear', 'horror',
+            'dread', 'terror', 'agony', 'suffering', 'pain', 'misery', 'doom',
+            'wretched', 'evil', 'curse', 'hate', 'hatred', 'rage', 'fury'
+        }
+        positive_words = {
+            'joy', 'happy', 'happiness', 'love', 'laugh', 'laughter', 'smile',
+            'hope', 'light', 'bright', 'beautiful', 'wonderful', 'delight',
+            'pleasure', 'peace', 'gentle', 'kind', 'warm', 'sweet', 'cheer',
+            'merry', 'glad', 'blessed', 'radiant', 'celebrate', 'dream'
+        }
+        dark_density   = sum(1 for w in words_lower if w in dark_words) / total_words if total_words > 0 else 0
+        positive_density = sum(1 for w in words_lower if w in positive_words) / total_words if total_words > 0 else 0
 
-        vocabulary_richness = lexical_diversity * 100
+        #Tone score
+        tone_score = 50 + ((positive_density - dark_density) * 1000)
+        tone_score = max(0, min(100, tone_score))
+
+        #Vocabulary richness
+        window_size = 1000
+        if total_words >= window_size:
+            window_scores = []
+            for i in range(0, total_words - window_size, window_size // 2):
+                window = words_lower[i:i + window_size]
+                window_scores.append(len(set(window)) / window_size)
+            vocab_richness_raw = sum(window_scores) / len(window_scores) if window_scores else lexical_diversity
+        else:
+            vocab_richness_raw = lexical_diversity
+
+        vocabulary_richness = round(vocab_richness_raw * 100, 2)
 
         #Dialogue percentage
         dialogue_pattern = r'[""][^""]+[""]|"[^"]+"'
