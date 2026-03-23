@@ -7,6 +7,7 @@ from app.database import engine, Base
 from app.routers import users, books
 from app.routers import stylometry
 from app.routers import recommendations
+from app.routers import batch_process
 
 #Createa database tables
 Base.metadata.create_all(bind=engine)
@@ -51,3 +52,4 @@ app.include_router(users.router)
 app.include_router(books.router)
 app.include_router(stylometry.router)
 app.include_router(recommendations.router)
+app.include_router(batch_process.router)
