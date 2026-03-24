@@ -652,17 +652,6 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
             Book.author == author
         ).first()
 
-        if existing_book:
-            #Backfill text_content if missing
-            if not existing_book.text_content:
-                text = await gutendex_service.get_book_text(gutenberg_id)
-                if text:
-                    existing_book.text_content = text[:150000]
-                    existing_book.gutenberg_id = gutenberg_id
-                    db.commit()
-                    db.refresh(existing_book)
-            return existing_book
-
         #Fetch and cache text on import
         text = await gutendex_service.get_book_text(gutenberg_id)
 
@@ -673,8 +662,7 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
             text_source=f"Project Gutenberg (ID: {gutenberg_id})",
             text_file_path=f"gutenberg_{gutenberg_id}",
             cover_url=cover_url,
-            genres=genres_json,
-            text_content=text[:150000] if text else None  
+            genres=genres_json 
         )
 
         db.add(new_book)
@@ -691,39 +679,6 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to import book: {str(e)}"
         )
-    
-@router.post("/backfill-texts")
-async def backfill_book_texts(db: Session = Depends(get_db)):
-    books = db.query(Book).filter(
-        Book.text_file_path != None,
-        Book.text_content == None 
-    ).all()
-
-    print(f"Found {len(books)} books to backfill")
-    count = 0
-    failed = 0
-
-    for book in books:
-        try:
-            gutenberg_id = extract_gutenberg_id(book.text_file_path)
-            text = await gutendex_service.get_book_text(gutenberg_id)
-            if text:
-                book.text_content = text[:150000]  # cap at 150k chars
-                count += 1
-                print(f"  Backfilled: {book.title}")
-            else:
-                failed += 1
-                print(f"  No text found: {book.title}")
-        except Exception as e:
-            failed += 1
-            print(f"  Failed: {book.title} — {e}")
-            continue
-
-    db.commit()
-    return {
-        "message": f"Backfilled {count} books, {failed} failed",
-        "total": len(books)
-    }
 
 @router.post("/backfill-genres")
 async def backfill_genres(
