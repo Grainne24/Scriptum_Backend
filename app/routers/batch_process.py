@@ -50,7 +50,16 @@ def _score_candidates_for_user(user_uuid: UUID, db: Session) -> list:
  
     #This takes all the books a user has taken
     rated_entries = [e for e in shelf_entries if e.rating is not None]
- 
+
+    #Convert the ratings to floats
+    for entry in rated_entries:
+        try:
+            entry.rating = float(entry.rating)
+        except (ValueError, TypeError):
+            entry.rating = None
+
+    rated_entries = [e for e in rated_entries if e.rating is not None]
+    
     #This gets all the books that have been stylometrically analysed
     candidates = (
         db.query(Book, StylometricProfile)
@@ -75,7 +84,7 @@ def _score_candidates_for_user(user_uuid: UUID, db: Session) -> list:
         if profile:
             user_rated_books.append({
                 "profile": profile,
-                "rating": entry.rating,
+                "rating": float(entry.rating),
             })
  
     #This scores the books
