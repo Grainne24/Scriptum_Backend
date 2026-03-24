@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db, SessionLocal
 from app.models import (User, Book, UserBookshelf, StylometricProfile, BookSimilarity, Recommendation,)
-from app.services.feedback_weights import calculate_feedback_adjustment
+from app.feedback_weights import calculate_feedback_adjustment
 
 logger = logging.getLogger(__name__)
  
