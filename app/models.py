@@ -44,6 +44,7 @@ class Book(Base):
     text_source = Column(String(100), nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
     analysed = Column(Boolean, default=False, index=True)
+    genres = Column(Text, nullable=True)
     text_content = Column(Text, nullable=True)
     
     # Relationships

@@ -10,7 +10,7 @@ class GutendexService:
     
     BASE_URL = "https://gutendex.com/books/"  
     
-    # This returns list of book with its metadata
+    #This returns list of book with its metadata
     async def search_books(
         self, 
         search: Optional[str] = None,
@@ -46,7 +46,7 @@ class GutendexService:
                     authors_list = book.get("authors", [])
                     author_names = [author.get("name", "Unknown") for author in authors_list]
                     
-                    # Get cover URL from formats
+                    #Get cover URL from formats
                     formats = book.get("formats", {})
                     cover_url = formats.get("image/jpeg") or formats.get("image/png")
                     
@@ -104,7 +104,7 @@ class GutendexService:
     
     #This downloads the whole book script if its available
     async def get_book_text(self, gutenberg_id: int) -> Optional[str]:
-        # Try multiple URL formats for text files
+        #Try multiple URL formats for text files
         urls_to_try = [
             f"https://www.gutenberg.org/files/{gutenberg_id}/{gutenberg_id}-0.txt",
             f"https://www.gutenberg.org/cache/epub/{gutenberg_id}/pg{gutenberg_id}.txt",
@@ -117,13 +117,13 @@ class GutendexService:
                     response = await client.get(url, timeout=60.0)
                     response.raise_for_status()
                     
-                    # Clean the text (remove Project Gutenberg header/footer)
+                    #Clean the text (remove Project Gutenberg header/footer)
                     text = response.text
                     print(f"Raw text length: {len(text)}")
                     text = self._clean_gutenberg_text(text)
                     print(f"Cleaned text length: {len(text)}")
                     
-                    if len(text) > 1000:  # Make sure we got actual content
+                    if len(text) > 1000: 
                         print(f"Successfully fetched {len(text)} characters")
                         return text
                 except Exception as e:

@@ -14,6 +14,7 @@ from app.services.gutendex_service import gutendex_service
 from app.services.stylometry_service import stylometry_analyser
 
 import asyncio
+import json
 
 router = APIRouter(prefix="/books", tags=["books"])
 
@@ -637,6 +638,14 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
         author = book_data["author"]
         cover_url = book_data.get("cover_url")
 
+        subjects = book_data.get("subjects", [])
+        cleaned_genres = []
+        for s in subjects[:5]:
+            genre = s.split(" -- ")[0].strip()
+            if genre not in cleaned_genres:
+                cleaned_genres.append(genre)
+        genres_json = json.dumps(cleaned_genres)
+
         existing_book = db.query(Book).filter(
             Book.title == title,
             Book.author == author
@@ -663,6 +672,7 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
             text_source=f"Project Gutenberg (ID: {gutenberg_id})",
             text_file_path=f"gutenberg_{gutenberg_id}",
             cover_url=cover_url,
+            genres=genres_json,
             text_content=text[:150000] if text else None  
         )
 
@@ -711,6 +721,44 @@ async def backfill_book_texts(db: Session = Depends(get_db)):
     db.commit()
     return {
         "message": f"Backfilled {count} books, {failed} failed",
+        "total": len(books)
+    }
+
+@router.post("/backfill-genres")
+async def backfill_genres(db: Session = Depends(get_db)):
+    import json
+
+    books = db.query(Book).filter(
+        Book.gutenberg_id.isnot(None),
+        Book.genres.is_(None)
+    ).all()
+
+    print(f"Found {len(books)} books to backfill genres for")
+    updated = 0
+    failed = 0
+
+    for book in books:
+        try:
+            book_data = await gutendex_service.get_book_by_id(book.gutenberg_id)
+            if book_data:
+                subjects = book_data.get("subjects", [])
+                #Take the first 5 genres
+                cleaned = []
+                for s in subjects[:5]:
+                    genre = s.split(" -- ")[0].strip()
+                    if genre not in cleaned:
+                        cleaned.append(genre)
+                book.genres = json.dumps(cleaned)
+                updated += 1
+                print(f"Ggenres for: {book.title} → {cleaned}")
+        except Exception as e:
+            failed += 1
+            print(f"Failed: {book.title} {e}")
+            continue
+
+    db.commit()
+    return {
+        "message": f"Updated {updated} books, {failed} failed",
         "total": len(books)
     }
 
