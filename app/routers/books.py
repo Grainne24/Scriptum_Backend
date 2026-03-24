@@ -15,6 +15,7 @@ from app.services.stylometry_service import stylometry_analyser
 
 import asyncio
 import json
+import time
 
 router = APIRouter(prefix="/books", tags=["books"])
 
@@ -745,8 +746,6 @@ async def backfill_genres(
     }
 
 def run_genre_backfill(book_ids: list):
-    import json
-    import asyncio
 
     db = SessionLocal()
     updated = 0
@@ -776,20 +775,22 @@ def run_genre_backfill(book_ids: list):
                     book.genres = json.dumps(cleaned)
                     db.commit()
                     updated += 1
-                    print(f"Updated: {book.title} {cleaned}")
+                    print(f"  Updated: {book.title} → {cleaned}")
                 else:
                     failed += 1
+
+                time.sleep(1)
 
             except Exception as e:
                 failed += 1
                 print(f"  Failed: {e}")
                 db.rollback()
+                time.sleep(2)
                 continue
 
     finally:
         db.close()
-        print(f"Genre backfill done {updated} updated, {failed} failed")
-
+        print(f"Genre backfill done — {updated} updated, {failed} failed")
 @router.post("/bulk-analyse")
 def bulk_analyse_books(
     limit: int = 50,

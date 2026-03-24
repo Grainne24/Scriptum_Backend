@@ -107,9 +107,10 @@ def _score_candidates_for_user(user_uuid: UUID, db: Session) -> list:
  
         #This adjusts the feedback from star ratings
         feedback_adj = calculate_feedback_adjustment(profile, user_rated_books)
- 
-        final_score = (base_score * 2) + feedback_adj
- 
+        genre_boost = calculate_genre_boost(book, user_rated_books, db)
+
+        final_score = (base_score * 2) + feedback_adj + genre_boost
+
         scored.append({
             "book_id": str(book.book_id),
             "title": book.title,
@@ -119,6 +120,7 @@ def _score_candidates_for_user(user_uuid: UUID, db: Session) -> list:
             "similarity": round(final_score, 4),
             "delta": round(base_score, 4),
             "feedback_adjustment": round(feedback_adj, 4),
+            "genre_boost": round(genre_boost, 4),  
         })
  
     scored.sort(key=lambda x: x["similarity"], reverse=True)
@@ -267,3 +269,45 @@ async def trigger_batch_process(
 @router.get("/batch-status")
 async def get_batch_status():
     return _batch_status
+
+def calculate_genre_boost(candidate_book: Book, user_rated_books: list, db: Session) -> float:
+
+    if not candidate_book.genres:
+        return 0.0
+
+    try:
+        candidate_genres = set(json.loads(candidate_book.genres))
+    except Exception:
+        return 0.0
+
+    if not candidate_genres:
+        return 0.0
+
+    boost = 0.0
+
+    for item in user_rated_books:
+        rating = float(item["rating"])
+        if rating < 4.0:
+            continue  #Only boosts the rating based on books the user actually liked
+
+        #Gets the rated book to check all its genres
+        rated_book = db.query(Book).filter(
+            Book.book_id == item["profile"].book_id
+        ).first()
+
+        if not rated_book or not rated_book.genres:
+            continue
+
+        try:
+            rated_genres = set(json.loads(rated_book.genres))
+        except Exception:
+            continue
+
+        shared = candidate_genres & rated_genres  # intersection
+        if shared:
+            #More shared genres = bigger boost, capped at 0.3
+            genre_boost = min(0.1 * len(shared), 0.3)
+            boost += genre_boost
+
+    # ap total boost at 0.3 regardless of how many rated books match
+    return min(boost, 0.3)
