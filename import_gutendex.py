@@ -122,7 +122,7 @@ def bulk_insert_books(books, batch_size=500):
                 cur,
                 """
                 INSERT INTO books (book_id, gutenberg_id, title, author, 
-                                 publication_year, isbn, text_file_path, 
+                                 publication_year, text_file_path, 
                                  cover_url, text_source, summary)
                 VALUES %s
                 ON CONFLICT (gutenberg_id) DO UPDATE SET

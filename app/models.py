@@ -37,7 +37,6 @@ class Book(Base):
     title = Column(String(500), nullable=False)
     author = Column(String(255), nullable=False, index=True)
     publication_year = Column(Integer, nullable=True)
-    isbn = Column(String(13), nullable=True)
     summary = Column(Text)
     text_file_path = Column(Text, nullable=True)
     cover_url = Column(String(500), nullable=True)
