@@ -46,7 +46,10 @@ def calculate_feedback_adjustment(
 
     total_adjustment = 0.0
 
-    for rated_profile, rating in user_rated_books:
+    for item in user_rated_books:
+        rated_profile = item["profile"]
+        rating = float(item["rating"])
+        
         weight = get_rating_weight(rating)
         if weight == 0:
             continue
