@@ -725,42 +725,70 @@ async def backfill_book_texts(db: Session = Depends(get_db)):
     }
 
 @router.post("/backfill-genres")
-async def backfill_genres(db: Session = Depends(get_db)):
-    import json
-
+async def backfill_genres(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     books = db.query(Book).filter(
         Book.gutenberg_id.isnot(None),
         Book.genres.is_(None)
     ).all()
 
-    print(f"Found {len(books)} books to backfill genres for")
+    book_ids = [book.book_id for book in books]
+    print(f"Queuing genre backfill for {len(book_ids)} books")
+
+    background_tasks.add_task(run_genre_backfill, book_ids)
+
+    return {
+        "message": f"Genre backfill started for {len(book_ids)} books",
+        "check_logs": "Watch Render logs for progress"
+    }
+
+def run_genre_backfill(book_ids: list):
+    import json
+    import asyncio
+
+    db = SessionLocal()
     updated = 0
     failed = 0
 
-    for book in books:
-        try:
-            book_data = await gutendex_service.get_book_by_id(book.gutenberg_id)
-            if book_data:
-                subjects = book_data.get("subjects", [])
-                #Take the first 5 genres
-                cleaned = []
-                for s in subjects[:5]:
-                    genre = s.split(" -- ")[0].strip()
-                    if genre not in cleaned:
-                        cleaned.append(genre)
-                book.genres = json.dumps(cleaned)
-                updated += 1
-                print(f"Ggenres for: {book.title} → {cleaned}")
-        except Exception as e:
-            failed += 1
-            print(f"Failed: {book.title} {e}")
-            continue
+    try:
+        for book_id in book_ids:
+            try:
+                book = db.query(Book).filter(Book.book_id == book_id).first()
+                if not book or not book.gutenberg_id:
+                    continue
 
-    db.commit()
-    return {
-        "message": f"Updated {updated} books, {failed} failed",
-        "total": len(books)
-    }
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                book_data = loop.run_until_complete(
+                    gutendex_service.get_book_by_id(book.gutenberg_id)
+                )
+                loop.close()
+
+                if book_data:
+                    subjects = book_data.get("subjects", [])
+                    cleaned = []
+                    for s in subjects[:5]:
+                        genre = s.split(" -- ")[0].strip()
+                        if genre not in cleaned:
+                            cleaned.append(genre)
+                    book.genres = json.dumps(cleaned)
+                    db.commit()
+                    updated += 1
+                    print(f"Updated: {book.title} {cleaned}")
+                else:
+                    failed += 1
+
+            except Exception as e:
+                failed += 1
+                print(f"  Failed: {e}")
+                db.rollback()
+                continue
+
+    finally:
+        db.close()
+        print(f"Genre backfill done {updated} updated, {failed} failed")
 
 @router.post("/bulk-analyse")
 def bulk_analyse_books(
