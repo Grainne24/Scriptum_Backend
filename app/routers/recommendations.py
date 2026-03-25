@@ -133,9 +133,10 @@ def get_recommendations_for_user(
                 StylometricProfile.book_id == entry.book_id
             ).first()
             if profile:
-                user_rated_books.append((profile, float(entry.rating)))
-
-        print(f"User has rated {len(user_rated_books)} books with profiles")
+                user_rated_books.append({
+                    "profile": profile,
+                    "rating": float(entry.rating)
+                })
 
         shelf_book_ids = set(
             entry.book_id for entry in db.query(UserBookshelf).filter(
