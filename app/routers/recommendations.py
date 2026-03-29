@@ -15,6 +15,12 @@ router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
 CACHE_TTL_HOURS = 24
 
+#ability to turn genre recommender on and off
+ENABLE_GENRE_LAYER = True
+
+STYLOMETRIC_WEIGHT = 0.8
+GENRE_WEIGHT = 0.2
+
 class RecommendationResponse(BaseModel):
     book_id: UUID
     title: str
@@ -24,6 +30,53 @@ class RecommendationResponse(BaseModel):
     similarity: float
 
     model_config = {"from_attributes": True}
+
+#Genre layer
+
+#This turns the genres from upper case to lower case
+def parse_genres(genres_str: Optional[str]) -> set:
+    if not genres_str:
+        return set()
+    genres = genres_str.replace(";", ",").split(",")
+    return {g.strip().lower() for g in genres if g.strip()}
+
+#This compares the book genre to a users genre profile
+def calculate_genre_score(candidate_genres: set, user_genre_profile: dict) -> float:
+    if not candidate_genres or not user_genre_profile:
+        return 0.0
+ 
+    total_weight = sum(user_genre_profile.values())
+    if total_weight == 0:
+        return 0.0
+ 
+    #The higher the weight of a certain genre the more likely they will be recommended to a user
+    matched_weight = sum(
+        user_genre_profile.get(genre, 0)
+        for genre in candidate_genres
+    )
+ 
+    return min(matched_weight / total_weight, 1.0)
+
+#This is the user genre profile which uses highly rated books 
+def build_user_genre_profile(user_rated_books: list, db: Session) -> dict:
+    genre_counts = {}
+ 
+    for entry in user_rated_books:
+        if float(entry["rating"]) < 4.0: #Only books that are rated 4 and higher
+            continue
+ 
+        book = db.query(Book).filter(
+            Book.book_id == entry["profile"].book_id
+        ).first()
+ 
+        if not book or not book.genres:
+            continue
+ 
+        genres = parse_genres(book.genres)
+        for genre in genres:
+            genre_counts[genre] = genre_counts.get(genre, 0) + 1
+ 
+    return genre_counts
 
 def get_cached_recommendations(user_uuid: UUID, db: Session) -> Optional[list]:
     cutoff = datetime.utcnow() - timedelta(hours=CACHE_TTL_HOURS)
