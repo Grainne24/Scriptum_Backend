@@ -17,12 +17,16 @@ class UserCreate(BaseModel):
     email: EmailStr
     username: str = Field(..., min_length=3, max_length=100)
     password: str = Field(..., min_length=8)
+    first_name: Optional[str] = Field(None, max_length=100)
+    last_name: Optional[str] = Field(None, max_length=100)
 
 #User response
 class UserResponse(BaseModel):
     user_id: UUID
     email: EmailStr
     username: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     created_at: datetime
     is_active: bool
     last_login: Optional[datetime] = None

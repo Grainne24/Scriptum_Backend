@@ -134,7 +134,7 @@ def _batch_save_recommendations(user_uuid: UUID, scored: list, db: Session):
     for rank, item in enumerate(scored, start=1):
         rec = Recommendation(
             recommendation_id=uuid.uuid4(),
-            user_id=user_uuid,
+            user_id=user_uuid, 
             book_id=UUID(item["book_id"]),
             similarity_score=item["similarity"],
             rank=rank,
