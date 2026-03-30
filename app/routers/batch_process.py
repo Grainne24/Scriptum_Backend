@@ -235,7 +235,6 @@ def _run_batch(batch_size: int, force_refresh: bool):
         )
 
 #Endpoints
-
 @router.post("/batch-process")
 async def trigger_batch_process(
     background_tasks: BackgroundTasks,
@@ -303,11 +302,11 @@ def calculate_genre_boost(candidate_book: Book, user_rated_books: list, db: Sess
         except Exception:
             continue
 
-        shared = candidate_genres & rated_genres  # intersection
+        shared = candidate_genres & rated_genres 
         if shared:
-            #More shared genres = bigger boost, capped at 0.3
+            #More shared genres is a bigger boost, capped at 0.3
             genre_boost = min(0.1 * len(shared), 0.3)
             boost += genre_boost
 
-    # ap total boost at 0.3 regardless of how many rated books match
+    #ap total boost at 0.3 regardless of how many rated books match
     return min(boost, 0.3)
