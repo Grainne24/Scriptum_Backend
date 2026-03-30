@@ -167,10 +167,24 @@ def analyse_book_background(book_id: UUID):
         print(f"Text file path: {book.text_file_path}")
 
         try:
-            gutenberg_id = extract_gutenberg_id(book.text_file_path)
+            if "gutenberg_" in book.text_file_path:
+                gutenberg_id = int(book.text_file_path.replace("gutenberg_", ""))
+            elif "gutenberg.org/ebooks/" in book.text_file_path:
+                #Extract ID from the gutendex URL
+                import re
+                match = re.search(r'/ebooks/(\d+)', book.text_file_path)
+                if match:
+                    gutenberg_id = int(match.group(1))
+                else:
+                    print(f"Could not extract Gutenberg ID from URL: {book.text_file_path}")
+                    return
+            else:
+                print(f"Unknown text_file_path format: {book.text_file_path}")
+                return
+                
             print(f"Extracted Gutenberg ID: {gutenberg_id}")
-        except ValueError as e:
-            print(f"Failed to extract Gutenberg ID: {e}")
+        except (ValueError, AttributeError) as e:
+            print(f"Failed to extract Gutenberg ID from '{book.text_file_path}': {e}")
             return
         
         #Fetch the full text of the book from Gutenberg
@@ -295,7 +309,9 @@ async def add_to_bookshelf(
         
         return {
             "message": "Book added to bookshelf successfully",
-            "analysis_queued": not bool(existing_profile)
+            "analysis_queued": not bool(db.query(StylometricProfile).filter(
+                StylometricProfile.book_id == book_id
+            ).first())
         }
         
     except HTTPException:
@@ -609,15 +625,6 @@ def get_books(
     return books
 
 @router.post("/import-from-gutendex/{gutenberg_id}", response_model=BookResponse)
-
-def _parse_genres(subjects: list) -> str:
-    cleaned = []
-    for s in subjects[:5]:
-        genre = s.split(" -- ")[0].strip()
-        if genre not in cleaned:
-            cleaned.append(genre)
-    return json.dumps(cleaned)
-    
 async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get_db)):
     try:
         book_data = await gutendex_service.get_book_by_id(gutenberg_id)
@@ -632,7 +639,21 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
         author = book_data["author"]
         cover_url = book_data.get("cover_url")
 
-        genres_json = _parse_genres(book_data.get("subjects", []))
+        subjects = book_data.get("subjects", [])
+        cleaned_genres = []
+        for s in subjects[:5]:
+            genre = s.split(" -- ")[0].strip()
+            if genre not in cleaned_genres:
+                cleaned_genres.append(genre)
+        genres_json = json.dumps(cleaned_genres)
+
+        existing_book = db.query(Book).filter(
+            Book.title == title,
+            Book.author == author
+        ).first()
+
+        #Fetch and cache text on import
+        text = await gutendex_service.get_book_text(gutenberg_id)
 
         new_book = Book(
             title=title,
@@ -700,9 +721,16 @@ def run_genre_backfill(book_ids: list):
                 loop.close()
 
                 if book_data:
-                    book.genres = _parse_genres(book_data.get("subjects", []))
+                    subjects = book_data.get("subjects", [])
+                    cleaned = []
+                    for s in subjects[:5]:
+                        genre = s.split(" -- ")[0].strip()
+                        if genre not in cleaned:
+                            cleaned.append(genre)
+                    book.genres = json.dumps(cleaned)
                     db.commit()
                     updated += 1
+                    print(f"  Updated: {book.title} → {cleaned}")
                 else:
                     failed += 1
 
@@ -779,6 +807,18 @@ def get_stylometric_profile(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch stylometric profile: {str(e)}"
         )
+
+@router.get("/{book_id}", response_model=BookResponse)
+def get_book(book_id: UUID, db: Session = Depends(get_db)):
+    book = db.query(Book).filter(Book.book_id == book_id).first()
+    
+    if not book:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Book not found"
+        )
+    
+    return book
 
 @router.put("/{book_id}", response_model=BookResponse)
 def update_book(book_id: UUID, book_update: BookUpdate, db: Session = Depends(get_db)):
@@ -1021,14 +1061,3 @@ async def get_book_recommendations(
             detail=f"Failed to get recommendations: {str(e)}"
         )
     
-@router.get("/{book_id}", response_model=BookResponse)
-def get_book(book_id: UUID, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.book_id == book_id).first()
-    
-    if not book:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Book not found"
-        )
-    
-    return book
