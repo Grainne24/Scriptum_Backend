@@ -780,18 +780,6 @@ def get_stylometric_profile(
             detail=f"Failed to fetch stylometric profile: {str(e)}"
         )
 
-@router.get("/{book_id}", response_model=BookResponse)
-def get_book(book_id: UUID, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.book_id == book_id).first()
-    
-    if not book:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Book not found"
-        )
-    
-    return book
-
 @router.put("/{book_id}", response_model=BookResponse)
 def update_book(book_id: UUID, book_update: BookUpdate, db: Session = Depends(get_db)):
     book = db.query(Book).filter(Book.book_id == book_id).first()
@@ -1033,3 +1021,14 @@ async def get_book_recommendations(
             detail=f"Failed to get recommendations: {str(e)}"
         )
     
+@router.get("/{book_id}", response_model=BookResponse)
+def get_book(book_id: UUID, db: Session = Depends(get_db)):
+    book = db.query(Book).filter(Book.book_id == book_id).first()
+    
+    if not book:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Book not found"
+        )
+    
+    return book
