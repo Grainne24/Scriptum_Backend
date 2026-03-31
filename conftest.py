@@ -1,4 +1,3 @@
-# app/tests/conftest.py
 import sys
 import os
 import pytest
@@ -11,12 +10,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "app"
 from app.database import Base, get_db
 from app.main import app
 
-# Use an in-memory SQLite database for tests — no PostgreSQL connection needed
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test.db"
 
 engine = create_engine(
     SQLALCHEMY_TEST_DATABASE_URL,
-    connect_args={"check_same_thread": False}  # Required for SQLite
+    connect_args={"check_same_thread": False} 
 )
 
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
