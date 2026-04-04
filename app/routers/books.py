@@ -8,7 +8,7 @@ from uuid import UUID
 from datetime import date, datetime
 
 from app.database import get_db, SessionLocal
-from app.models import Book, StylometricProfile, UserBookshelf, BookSimilarity, Rating
+from app.models import Book, StylometricProfile, UserBookshelf
 from app.schemas import BookResponse, BookUpdate, UserBookshelfUpdate
 from app.services.gutendex_service import gutendex_service
 from app.services.stylometry_service import stylometry_analyser
@@ -605,25 +605,6 @@ async def search_gutendex(
             detail=f"Failed to search Gutendex: {str(e)}"
         )
 
-@router.get("/", response_model=List[BookResponse])
-def get_books(
-    skip: int = 0, 
-    limit: int = 100,
-    author: Optional[str] = None,
-    analysed: Optional[bool] = None,
-    db: Session = Depends(get_db)
-):
-    query = db.query(Book)
-    
-    if author:
-        query = query.filter(Book.author.ilike(f"%{author}%"))
-    
-    if analysed is not None:
-        query = query.filter(Book.analysed == analysed)
-    
-    books = query.offset(skip).limit(limit).all()
-    return books
-
 @router.post("/import-from-gutendex/{gutenberg_id}", response_model=BookResponse)
 async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get_db)):
     try:
@@ -746,6 +727,7 @@ def run_genre_backfill(book_ids: list):
     finally:
         db.close()
         print(f"Genre backfill done — {updated} updated, {failed} failed")
+
 @router.post("/bulk-analyse")
 def bulk_analyse_books(
     limit: int = 50,
@@ -768,6 +750,17 @@ def bulk_analyse_books(
         "message": f"Queued {len(queued)} books for analysis",
         "queued": queued
     }
+
+def extract_gutenberg_id(text_file_path: str) -> int:
+    """Extract Gutenberg ID from text_file_path"""
+    if "gutenberg_" in text_file_path:
+        return int(text_file_path.replace("gutenberg_", ""))
+    elif "gutenberg.org/ebooks/" in text_file_path:
+        import re
+        match = re.search(r'/ebooks/(\d+)', text_file_path)
+        if match:
+            return int(match.group(1))
+    raise ValueError(f"Cannot extract Gutenberg ID from: {text_file_path}")
 
 @router.get("/{book_id}/stylometric-profile")
 def get_stylometric_profile(
@@ -807,6 +800,80 @@ def get_stylometric_profile(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch stylometric profile: {str(e)}"
         )
+
+@router.get("/recommendations/{book_id}")
+def get_book_recommendations(
+    book_id: UUID,
+    limit: int = 10,
+    db: Session = Depends(get_db)
+):
+    try:
+        source_book = db.query(Book).filter(Book.book_id == book_id).first()
+        if not source_book:
+            raise HTTPException(status_code=404, detail="Book not found")
+
+        source_profile = db.query(StylometricProfile).filter(
+            StylometricProfile.book_id == book_id
+        ).first()
+
+        if not source_profile:
+            raise HTTPException(status_code=400, detail="Source book hasn't been analyzed yet")
+
+        #Get all the other analysed books with profiles
+        candidates = db.query(Book, StylometricProfile).join(
+            StylometricProfile, Book.book_id == StylometricProfile.book_id
+        ).filter(
+            Book.book_id != book_id,
+            Book.analysed == True
+        ).all()
+
+        if not candidates:
+            return {"source_book": {"book_id": source_book.book_id, "title": source_book.title, "author": source_book.author}, "recommendations": []}
+
+        #Score by euclidean distance across stylometric features
+        scored = []
+        for book, profile in candidates:
+            try:
+                diff = (
+                    (float(source_profile.pacing_score or 0) - float(profile.pacing_score or 0)) ** 2 +
+                    (float(source_profile.tone_score or 0) - float(profile.tone_score or 0)) ** 2 +
+                    (float(source_profile.vocabulary_richness or 0) - float(profile.vocabulary_richness or 0)) ** 2 +
+                    (float(source_profile.avg_sentence_length or 0) - float(profile.avg_sentence_length or 0)) ** 2
+                )
+                similarity = 1 / (1 + diff ** 0.5)
+
+                scored.append({
+                    "book_id": book.book_id,
+                    "title": book.title,
+                    "author": book.author,
+                    "similarity_score": round(similarity, 4),
+                    "cover_url": book.cover_url,
+                    "summary": book.summary,
+                    "pacing_score": float(profile.pacing_score or 0),
+                    "tone_score": float(profile.tone_score or 0),
+                    "vocabulary_richness": float(profile.vocabulary_richness or 0)
+                })
+            except Exception as e:
+                print(f"Error scoring {book.title}: {e}")
+                continue
+
+        scored.sort(key=lambda x: x["similarity_score"], reverse=True)
+
+        return {
+            "source_book": {
+                "book_id": source_book.book_id,
+                "title": source_book.title,
+                "author": source_book.author
+            },
+            "recommendations": scored[:limit],
+            "cached": False
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR in recommendations endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get recommendations: {str(e)}")
 
 @router.get("/{book_id}", response_model=BookResponse)
 def get_book(book_id: UUID, db: Session = Depends(get_db)):
@@ -854,210 +921,21 @@ def delete_book(book_id: UUID, db: Session = Depends(get_db)):
     
     return None
 
-def extract_gutenberg_id(text_file_path: str) -> int:
-    """Extract Gutenberg ID from text_file_path"""
-    if "gutenberg_" in text_file_path:
-        return int(text_file_path.replace("gutenberg_", ""))
-    elif "gutenberg.org/ebooks/" in text_file_path:
-        import re
-        match = re.search(r'/ebooks/(\d+)', text_file_path)
-        if match:
-            return int(match.group(1))
-    raise ValueError(f"Cannot extract Gutenberg ID from: {text_file_path}")
-
-@router.get("/recommendations/{book_id}")
-async def get_book_recommendations(
-    book_id: UUID,
-    limit: int = 10,
-    force_recalculate: bool = False, 
+@router.get("/", response_model=List[BookResponse])
+def get_books(
+    skip: int = 0, 
+    limit: int = 100,
+    author: Optional[str] = None,
+    analysed: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
-    try:
-        print(f"Getting recommendations for book {book_id}")
-        
-        #Get the source book
-        source_book = db.query(Book).filter(Book.book_id == book_id).first()
-        if not source_book:
-            raise HTTPException(status_code=404, detail="Book not found")
-        
-        source_profile = db.query(StylometricProfile).filter(
-            StylometricProfile.book_id == book_id
-        ).first()
-        
-        if not source_profile:
-            raise HTTPException(
-                status_code=400,
-                detail="Source book hasn't been analyzed yet"
-            )
-        
-        #first it checks if the similarities of the two books are already stored
-        if not force_recalculate:
-            existing_similarities = db.query(BookSimilarity).filter(
-                (BookSimilarity.book_id_1 == book_id) | 
-                (BookSimilarity.book_id_2 == book_id)
-            ).order_by(BookSimilarity.similarity_score.desc()).limit(limit).all()
-            
-            if len(existing_similarities) >= limit:
-                print(f"Found {len(existing_similarities)} cached similarities")
-                
-                #Convert to response format
-                recommendations = []
-                for sim in existing_similarities:
-                    #Get the other book which the book is being compared to
-                    other_book_id = sim.book_id_2 if sim.book_id_1 == book_id else sim.book_id_1
-                    
-                    other_book = db.query(Book, StylometricProfile).join(
-                        StylometricProfile
-                    ).filter(Book.book_id == other_book_id).first()
-                    
-                    if other_book:
-                        book, profile = other_book
-                        recommendations.append({
-                            "book_id": book.book_id,
-                            "title": book.title,
-                            "author": book.author,
-                            "similarity_score": round(sim.similarity_score, 4),
-                            "pacing_similarity": round(sim.pacing_similarity, 4) if sim.pacing_similarity else None,
-                            "tone_similarity": round(sim.tone_similarity, 4) if sim.tone_similarity else None,
-                            "vocabulary_similarity": round(sim.vocabulary_similarity, 4) if sim.vocabulary_similarity else None,
-                            "cover_url": book.cover_url,
-                            "summary": book.summary,
-                            "pacing_score": float(profile.pacing_score),
-                            "tone_score": float(profile.tone_score),
-                            "vocabulary_richness": float(profile.vocabulary_richness)
-                        })
-                
-                return {
-                    "source_book": {
-                        "book_id": source_book.book_id,
-                        "title": source_book.title,
-                        "author": source_book.author
-                    },
-                    "recommendations": recommendations,
-                    "cached": True
-                }
-        
-        #Then calculate two new books and their similarities
-        print("Calculating new similarities...")
-        
-        #Filter candidates by similar features
-        pacing_range = 20
-        tone_range = 20
-        vocab_range = 10
-        
-        candidate_books = db.query(Book, StylometricProfile).join(
-            StylometricProfile
-        ).filter(
-            Book.book_id != book_id,
-            Book.analysed == True,
-            StylometricProfile.pacing_score.between(
-                source_profile.pacing_score - pacing_range,
-                source_profile.pacing_score + pacing_range
-            ),
-            StylometricProfile.tone_score.between(
-                source_profile.tone_score - tone_range,
-                source_profile.tone_score + tone_range
-            ),
-            StylometricProfile.vocabulary_richness.between(
-                source_profile.vocabulary_richness - vocab_range,
-                source_profile.vocabulary_richness + vocab_range
-            )
-        ).limit(100).all()
-        
-        print(f"Found {len(candidate_books)} candidates")
-        
-        #Get source book text
-        source_gutenberg_id = extract_gutenberg_id(source_book.text_file_path)
-        source_text = await gutendex_service.get_book_text(source_gutenberg_id)
-        
-        if not source_text:
-            raise HTTPException(status_code=500, detail="Could not fetch source text")
-        
-        #Calculate and store the similarities
-        similarities = []
-        for book, profile in candidate_books[:50]:
-            try:
-                candidate_gutenberg_id = extract_gutenberg_id(book.text_file_path)
-                candidate_text = await gutendex_service.get_book_text(candidate_gutenberg_id)
-                
-                if not candidate_text:
-                    continue
-                
-                #Calculate Burrows' Delta
-                similarity = stylometry_analyser.calculate_similarity(source_text, candidate_text)
-                
-                #Calculate feature similarities
-                feature_sims = stylometry_analyser.calculate_normalized_similarity(source_profile, profile, db)
-                pacing_sim = feature_sims["pacing_similarity"]
-                tone_sim = feature_sims["tone_similarity"]
-                vocab_sim = feature_sims["vocabulary_similarity"]
-                sent_sim = feature_sims["sentence_length_similarity"]
-
-                #store it in the database
-                book_id_1 = min(book_id, book.book_id)
-                book_id_2 = max(book_id, book.book_id)
-                
-                #Check if already exists
-                existing = db.query(BookSimilarity).filter(
-                    BookSimilarity.book_id_1 == book_id_1,
-                    BookSimilarity.book_id_2 == book_id_2
-                ).first()
-                
-                if not existing:
-                    new_similarity = BookSimilarity(
-                        book_id_1=book_id_1,
-                        book_id_2=book_id_2,
-                        similarity_score=similarity,
-                        pacing_similarity=pacing_sim,
-                        tone_similarity=tone_sim,
-                        vocabulary_similarity=vocab_sim,
-                        sentence_length_similarity=sent_sim
-                    )
-                    db.add(new_similarity)
-                
-                similarities.append({
-                    "book_id": book.book_id,
-                    "title": book.title,
-                    "author": book.author,
-                    "similarity_score": round(similarity, 4),
-                    "pacing_similarity": round(pacing_sim, 4),
-                    "tone_similarity": round(tone_sim, 4),
-                    "vocabulary_similarity": round(vocab_sim, 4),
-                    "cover_url": book.cover_url,
-                    "summary": book.summary,
-                    "pacing_score": float(profile.pacing_score),
-                    "tone_score": float(profile.tone_score),
-                    "vocabulary_richness": float(profile.vocabulary_richness)
-                })
-                
-            except Exception as e:
-                print(f"Error processing {book.title}: {e}")
-                continue
-        
-        #Commit all new similarities
-        db.commit()
-        
-        #Sort and return
-        similarities.sort(key=lambda x: x["similarity_score"], reverse=True)
-        
-        return {
-            "source_book": {
-                "book_id": source_book.book_id,
-                "title": source_book.title,
-                "author": source_book.author
-            },
-            "recommendations": similarities[:limit],
-            "cached": False
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"ERROR in recommendations endpoint: {str(e)}")
-        import traceback
-        print(f"Full traceback:\n{traceback.format_exc()}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get recommendations: {str(e)}"
-        )
+    query = db.query(Book)
     
+    if author:
+        query = query.filter(Book.author.ilike(f"%{author}%"))
+    
+    if analysed is not None:
+        query = query.filter(Book.analysed == analysed)
+    
+    books = query.offset(skip).limit(limit).all()
+    return books

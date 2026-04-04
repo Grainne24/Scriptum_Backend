@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Book, StylometricProfile, UserBookshelf, BookSimilarity, Recommendation
+from app.models import Book, StylometricProfile, UserBookshelf, Recommendation
 from app.services.stylometry_service import stylometry_analyser
-from app.services.gutendex_service import gutendex_service
 from pydantic import BaseModel
 from typing import List, Optional
 from uuid import UUID
@@ -213,18 +212,6 @@ def get_recommendations_for_user(
 
         for book, profile in candidates:
             base_score = 0.5
-
-            for entry in rated_entries:
-                book_id_1 = min(entry.book_id, book.book_id)
-                book_id_2 = max(entry.book_id, book.book_id)
-
-                cached_sim = db.query(BookSimilarity).filter(
-                    BookSimilarity.book_id_1 == book_id_1,
-                    BookSimilarity.book_id_2 == book_id_2
-                ).first()
-
-                if cached_sim:
-                    base_score = max(base_score, cached_sim.similarity_score)
 
             feedback_adj = calculate_feedback_adjustment(profile, user_rated_books)
             final_score = (base_score * 2) + feedback_adj
