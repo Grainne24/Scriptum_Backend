@@ -27,7 +27,6 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     
     #These are the relationships which connect tables together
-    ratings = relationship("Rating", back_populates="user", cascade="all, delete-orphan")
     recommendations = relationship("Recommendation", back_populates="user", cascade="all, delete-orphan")
 
 #Book table
@@ -49,7 +48,6 @@ class Book(Base):
     
     # Relationships
     stylometric_profile = relationship("StylometricProfile", back_populates="book", uselist=False, cascade="all, delete-orphan")
-    ratings = relationship("Rating", back_populates="book", cascade="all, delete-orphan")
     recommendations = relationship("Recommendation", back_populates="book", cascade="all, delete-orphan")
 
 #User Book table
@@ -89,22 +87,6 @@ class StylometricProfile(Base):
     
     #Relationships
     book = relationship("Book", back_populates="stylometric_profile")
-
-#Rating table
-class Rating(Base):
-    __tablename__ = "ratings"
-    
-    rating_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
-    book_id = Column(UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="CASCADE"), nullable=False, index=True)
-    rating = Column(Numeric(3, 2), nullable=False)
-    review_text = Column(Text, nullable=True)
-    rated_at = Column(TIMESTAMP, server_default=func.now())
-    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
-    
-    # Relationships
-    user = relationship("User", back_populates="ratings")
-    book = relationship("Book", back_populates="ratings")
 
 #Recommendation table
 class Recommendation(Base):
