@@ -126,21 +126,3 @@ class Recommendation(Base):
     #Relationships
     user = relationship("User", back_populates="recommendations")
     book = relationship("Book", back_populates="recommendations")
-
-#Book Simalarity table
-
-class BookSimilarity(Base):
-    __tablename__ = "book_similarities"
-    
-    book_id_1 = Column(UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="CASCADE"), primary_key=True, nullable=False)
-    book_id_2 = Column(UUID(as_uuid=True), ForeignKey("books.book_id", ondelete="CASCADE"), primary_key=True, nullable=False)
-    similarity_score = Column(Float, nullable=False)
-    pacing_similarity = Column(Float)
-    tone_similarity = Column(Float)
-    vocabulary_similarity = Column(Float)
-    sentence_length_similarity = Column(Float)
-    generated_at = Column(DateTime, default=datetime.utcnow)
-    
-    __table_args__ = (
-        CheckConstraint('book_id_1 < book_id_2', name='check_book_order'),
-    )
