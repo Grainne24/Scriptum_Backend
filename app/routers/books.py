@@ -661,6 +661,97 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
             detail=f"Failed to import book: {str(e)}"
         )
 
+@router.post("/bulk-import-gutendex")
+async def bulk_import_from_gutendex(
+    background_tasks: BackgroundTasks,
+    target: int = 6000,
+    db: Session = Depends(get_db)
+):
+    current_count = db.query(Book).count()
+    existing_gutenberg_ids = {
+        row[0] for row in db.query(Book.gutenberg_id).filter(Book.gutenberg_id.isnot(None)).all()
+    }
+    background_tasks.add_task(_run_bulk_import, target, existing_gutenberg_ids)
+    return {
+        "message": f"Bulk import started. Current books: {current_count}, target: {target}",
+        "check_logs": "Watch Render logs for progress"
+    }
+
+def _run_bulk_import(target: int, existing_gutenberg_ids: set):
+    db = SessionLocal()
+    imported = 0
+    skipped = 0
+    page = 1
+
+    try:
+        while True:
+            current_count = db.query(Book).count()
+            if current_count >= target:
+                print(f"Bulk import done — reached {current_count} books")
+                break
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            data = loop.run_until_complete(gutendex_service.get_books_page(page))
+            loop.close()
+
+            results = data.get("results", [])
+            if not results:
+                print(f"No more results at page {page}")
+                break
+
+            for book_data in results:
+                gutenberg_id = book_data.get("id")
+                if not gutenberg_id or gutenberg_id in existing_gutenberg_ids:
+                    skipped += 1
+                    continue
+
+                authors_list = book_data.get("authors", [])
+                author = authors_list[0].get("name", "Unknown") if authors_list else "Unknown"
+                title = book_data.get("title", "Unknown Title")
+                formats = book_data.get("formats", {})
+                cover_url = formats.get("image/jpeg") or formats.get("image/png")
+                subjects = book_data.get("subjects", [])
+                cleaned_genres = []
+                for s in subjects[:5]:
+                    genre = s.split(" -- ")[0].strip()
+                    if genre not in cleaned_genres:
+                        cleaned_genres.append(genre)
+
+                try:
+                    new_book = Book(
+                        title=title,
+                        author=author,
+                        gutenberg_id=gutenberg_id,
+                        text_source=f"Project Gutenberg (ID: {gutenberg_id})",
+                        text_file_path=f"gutenberg_{gutenberg_id}",
+                        cover_url=cover_url,
+                        genres=json.dumps(cleaned_genres)
+                    )
+                    db.add(new_book)
+                    db.commit()
+                    existing_gutenberg_ids.add(gutenberg_id)
+                    imported += 1
+                    print(f"Imported [{imported}]: {title} by {author}")
+                except Exception as e:
+                    db.rollback()
+                    skipped += 1
+                    print(f"Skipped {title}: {e}")
+
+                current_count = db.query(Book).count()
+                if current_count >= target:
+                    break
+
+            print(f"Page {page} done — total books: {db.query(Book).count()}, imported: {imported}")
+            page += 1
+            time.sleep(1)
+
+    except Exception as e:
+        print(f"Bulk import error: {e}")
+    finally:
+        db.close()
+        print(f"Bulk import finished — imported: {imported}, skipped: {skipped}")
+
 @router.post("/backfill-genres")
 async def backfill_genres(
     background_tasks: BackgroundTasks,

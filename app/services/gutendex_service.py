@@ -70,6 +70,18 @@ class GutendexService:
                 print(f"Error searching Gutendex: {e}")
                 raise
     
+    #This fetches a single page of books from Gutendex (32 books per page)
+    async def get_books_page(self, page: int = 1) -> Dict:
+        params = {"page": page}
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            try:
+                response = await client.get(self.BASE_URL, params=params, timeout=30.0)
+                response.raise_for_status()
+                return response.json()
+            except Exception as e:
+                print(f"Error fetching page {page}: {e}")
+                return {}
+
     #This gets the book metadata by its Gutenberg ID which returns the book directory or None
     async def get_book_by_id(self, gutenberg_id: int) -> Optional[Dict]:
         url = f"{self.BASE_URL}{gutenberg_id}/"

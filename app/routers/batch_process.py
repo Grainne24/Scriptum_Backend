@@ -68,7 +68,7 @@ def _score_candidates_for_user(user_uuid: UUID, db: Session) -> list:
             Book.analysed == True,
             ~Book.book_id.in_(shelf_book_ids),
         )
-        .limit(500)
+        .limit(6000)
         .all()
     )
  
