@@ -123,6 +123,7 @@ def _batch_save_recommendations(user_uuid: UUID, scored: list, db: Session):
             recommendation_id=uuid.uuid4(),
             user_id=user_uuid,
             book_id=UUID(item["book_id"]),
+            similarity_score=item["similarity"],
             rank=rank,
             generated_at=datetime.utcnow(),
         )

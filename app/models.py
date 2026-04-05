@@ -96,6 +96,7 @@ class Recommendation(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False)
     book_id = Column(UUID(as_uuid=True), ForeignKey("books.book_id"), nullable=False)
     rank = Column(Integer, nullable=True)
+    similarity_score = Column(Float, nullable=True)
     generated_at = Column(DateTime, default=datetime.utcnow)
     viewed = Column(Boolean, default=False)
     viewed_at = Column(DateTime, nullable=True)
