@@ -8,7 +8,7 @@ from typing import List, Optional
 from uuid import UUID
 import uuid
 from datetime import datetime, timedelta
-from app.feedback_weights import calculate_feedback_adjustment
+from app.feedback_weights import calculate_feedback_adjustment, calculate_stylometric_distance
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
@@ -211,10 +211,16 @@ def get_recommendations_for_user(
         scored = []
 
         for book, profile in candidates:
-            base_score = 0.5
+            if user_rated_books:
+                base_score = sum(
+                    calculate_stylometric_distance(profile, item["profile"])
+                    for item in user_rated_books
+                ) / len(user_rated_books)
+            else:
+                base_score = 0.5
 
             feedback_adj = calculate_feedback_adjustment(profile, user_rated_books)
-            final_score = (base_score * 2) + feedback_adj
+            final_score = base_score + feedback_adj
 
             scored.append({
                 "book_id": str(book.book_id),

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db, SessionLocal
 from app.models import (User, Book, UserBookshelf, StylometricProfile, Recommendation)
-from app.feedback_weights import calculate_feedback_adjustment
+from app.feedback_weights import calculate_feedback_adjustment, calculate_stylometric_distance
 
 logger = logging.getLogger(__name__)
  
@@ -90,13 +90,19 @@ def _score_candidates_for_user(user_uuid: UUID, db: Session) -> list:
     #This scores the books
     scored = []
     for book, profile in candidates:
-        base_score = 0.5
- 
+        if user_rated_books:
+            base_score = sum(
+                calculate_stylometric_distance(profile, item["profile"])
+                for item in user_rated_books
+            ) / len(user_rated_books)
+        else:
+            base_score = 0.5
+
         #This adjusts the feedback from star ratings
         feedback_adj = calculate_feedback_adjustment(profile, user_rated_books)
         genre_boost = calculate_genre_boost(book, user_rated_books, db)
 
-        final_score = (base_score * 2) + feedback_adj + genre_boost
+        final_score = base_score + feedback_adj + genre_boost
 
         scored.append({
             "book_id": str(book.book_id),
