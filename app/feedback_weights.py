@@ -1,3 +1,8 @@
+'''
+This file procides the rating to weight mapping and two scoring functions used by recommendation pipeline in batch_process.py
+'''
+
+#Maps star ratings to influence weights used in calculcate_feedback_adjustment
 RATING_WEIGHTS = {
     1: -2,
     2: -1,
@@ -7,6 +12,7 @@ RATING_WEIGHTS = {
 }
 
 def get_rating_weight(rating) -> int:
+#Converts raw star rating to integer influence weight - rounds to neared integer
     if rating is None:
         return 0
     try:
@@ -16,6 +22,17 @@ def get_rating_weight(rating) -> int:
         return 0
 
 def calculate_stylometric_distance(profile_a, profile_b) -> float:
+#Computes stylometric similarity score between 2 stylometricProfile objects 
+    '''
+    Normalised by scale vector
+    Feature scale factors:
+            pacing_score / 100.0 -action verb density score (0-100 range)
+            tone_score / 100.0 -lexicon-based tone score (0-100 range)
+            vocabulary_richness / 100.0 -sliding window TTR (0-100 range)
+            avg_sentence_length / 50.0 -typical range ~5-50 words per sentence
+            avg_word_length /  10.0 -typical range ~3-10 characters per word
+            lexical_diversity / 1.0 -already normalised to (0, 1]
+    '''
     features = [
         ("pacing_score", 100.0),
         ("tone_score", 100.0),
@@ -35,18 +52,18 @@ def calculate_stylometric_distance(profile_a, profile_b) -> float:
         if val_a is None or val_b is None:
             continue
 
+        #Clamp at 0.0 so values further apart than the scale don't go negative.
         diff = abs(float(val_a) - float(val_b)) / scale
         similarity = max(0.0, 1.0 - diff)
         total_similarity += similarity
         count += 1
 
+    #Return the mean similarity across valid features else return 0
     return total_similarity / count if count > 0 else 0.0
 
 
-def calculate_feedback_adjustment(
-    candidate_profile,
-    user_rated_books: list, 
-) -> float:
+def calculate_feedback_adjustment(candidate_profile,user_rated_books: list) -> float:
+#This computes a feedback adjustment score for a candidate book based on how stylistically similar it is to books the user has already rated.
     if not user_rated_books:
         return 0.0
 
@@ -58,11 +75,13 @@ def calculate_feedback_adjustment(
         
         weight = get_rating_weight(rating)
         if weight == 0:
-            continue
+            continue #3 star ratings are neutral so skip
 
+        #High similairity contributes +2 and low similarity contributes +2
         similarity = calculate_stylometric_distance(candidate_profile, rated_profile)
         total_adjustment += similarity * weight
 
+    #Average across all rated books so adjustments dont grow too big as a user rates more books
     scaled = total_adjustment / len(user_rated_books)
 
     return scaled

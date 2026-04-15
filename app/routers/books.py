@@ -24,6 +24,7 @@ router = APIRouter(prefix="/books", tags=["books"])
 '''
 
 @router.get("/user-bookshelf", response_model=List[BookResponse])
+#Returns all books saved to a users personal bookshelf
 def get_my_bookshelf(
     user_id: str, 
     limit: int = 100,
@@ -45,6 +46,7 @@ def get_my_bookshelf(
                 StylometricProfile.book_id == book.book_id
             ).first()
             
+            #Build the response manually as merging from 3 different tables
             result.append({
                 "book_id": book.book_id,
                 "title": book.title,
@@ -80,6 +82,7 @@ def get_my_bookshelf(
         )
     
 @router.get("/my-bookshelf/{book_id}", response_model=BookResponse)
+#This returns full details of individual books on a users bookshelf 
 def get_bookshelf_book_details(
     book_id: UUID,
     user_id: str,
@@ -138,7 +141,8 @@ def get_bookshelf_book_details(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch book details: {str(e)}"
         )
-    
+
+#This background task is r=triggered when a user adds a book to their bookshelf - it fectehes the book text and runs an analysis
 def analyse_book_background(book_id: UUID):
     print(f"Task started for book {book_id}")
     db = SessionLocal()
@@ -246,6 +250,7 @@ def analyse_book_background(book_id: UUID):
         print(f"Database session closed for book {book_id}")
 
 @router.post("/my-bookshelf/{book_id}")
+#Adds a book to a users bookshelf with an optional status, comments and dates option.
 async def add_to_bookshelf(
     book_id: UUID,
     user_id: str,
@@ -325,10 +330,11 @@ async def add_to_bookshelf(
     
 
 @router.post("/my-bookshelf/{book_id}/rating")
+#Saves a star rating for a book on a users bookshelf
 def save_book_rating(
     book_id: UUID,
     user_id: str,
-    rating: float,
+    rating: float, #Allows for half stars
     db: Session = Depends(get_db)
 ):
     try:
@@ -341,6 +347,7 @@ def save_book_rating(
         if not bookshelf_entry:
             raise HTTPException(status_code=404, detail="Book not in bookshelf")
 
+        #Save the rating
         bookshelf_entry.rating = rating
         bookshelf_entry.rated_at = datetime.utcnow()
         bookshelf_entry.updated_at = datetime.utcnow()
@@ -358,6 +365,7 @@ def save_book_rating(
     
     
 @router.put("/my-bookshelf/{book_id}")
+#Updates a bookshelf entru status, comments or reading dates when changed by a user
 def update_bookshelf_entry(
     book_id: UUID,
     user_id: str,
@@ -378,6 +386,7 @@ def update_bookshelf_entry(
                 detail="Book not in bookshelf"
             )
 
+        #Only update fields that were updated
         if update_data.book_status is not None:
             bookshelf_entry.book_status = update_data.book_status
         if update_data.comments is not None:
@@ -411,6 +420,7 @@ def update_bookshelf_entry(
         )
     
 @router.put("/my-bookshelf/{book_id}/status")
+#Lightweight endpoint for updating reading status of entry
 def update_book_status(
     book_id: UUID,
     user_id: str,
@@ -445,6 +455,7 @@ def update_book_status(
         )
 
 @router.delete("/my-bookshelf/{book_id}")
+#Removes a book from a users personal bookshelf
 def remove_from_bookshelf(
     book_id: UUID,
     user_id: str,
@@ -478,10 +489,8 @@ def remove_from_bookshelf(
             detail=f"Failed to remove book: {str(e)}"
         )
 
-'''
-    This is used for the search page and searched all the books in the database
-'''
 @router.get("/search", response_model=List[BookResponse])
+#This is used for the search page and searched all the books in the database
 def search_all_books(
     query: Optional[str] = None,
     limit: int = 20,
@@ -533,8 +542,9 @@ def search_all_books(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to search books: {str(e)}"
         )
+    
 '''
-    This is kept for testing
+    This is kept for testing - not wired to any android screens
 '''
 @router.get("/bookshelf", response_model=List[BookResponse])
 @router.get("/analysed", response_model=List[BookResponse])
@@ -662,6 +672,7 @@ async def import_book_from_gutendex(gutenberg_id: int, db: Session = Depends(get
         )
 
 @router.post("/bulk-import-gutendex")
+#This bulk imports gutendex books with authors, title, publication date, genre, etc
 async def bulk_import_from_gutendex(
     background_tasks: BackgroundTasks,
     target: int = 6000,
@@ -674,9 +685,10 @@ async def bulk_import_from_gutendex(
     background_tasks.add_task(_run_bulk_import, target, existing_gutenberg_ids)
     return {
         "message": f"Bulk import started. Current books: {current_count}, target: {target}",
-        "check_logs": "Watch Render logs for progress"
+        "check_logs": "Render"
     }
 
+#Background worker for bulk_import_from_gutendex - goes through gutendex results and imports books until target met
 def _run_bulk_import(target: int, existing_gutenberg_ids: set):
     db = SessionLocal()
     imported = 0
@@ -690,6 +702,7 @@ def _run_bulk_import(target: int, existing_gutenberg_ids: set):
                 print(f"Bulk import done — reached {current_count} books")
                 break
 
+            #Run async gutendex page fetch synchnronouslyt inside thread
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             data = loop.run_until_complete(gutendex_service.get_books_page(page))
@@ -706,6 +719,8 @@ def _run_bulk_import(target: int, existing_gutenberg_ids: set):
                     skipped += 1
                     continue
 
+                #Returns all book information
+                #Note: returns authors as dicts
                 authors_list = book_data.get("authors", [])
                 author = authors_list[0].get("name", "Unknown") if authors_list else "Unknown"
                 title = book_data.get("title", "Unknown Title")
@@ -753,6 +768,7 @@ def _run_bulk_import(target: int, existing_gutenberg_ids: set):
         print(f"Bulk import finished — imported: {imported}, skipped: {skipped}")
 
 @router.post("/backfill-genres")
+#Backfill genres as this was added later in project
 async def backfill_genres(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
@@ -773,7 +789,7 @@ async def backfill_genres(
     }
 
 def run_genre_backfill(book_ids: list):
-
+#Background worker for backfilling genre column
     db = SessionLocal()
     updated = 0
     failed = 0
@@ -820,11 +836,13 @@ def run_genre_backfill(book_ids: list):
         print(f"Genre backfill done — {updated} updated, {failed} failed")
 
 @router.post("/bulk-analyse")
+#This queues stylometric analysis on books that have not yet been analysed
 def bulk_analyse_books(
-    limit: int = 50,
+    limit: int = 50, #limited analysis on books is 50
     background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db)
 ):
+    #Find books that can be analysed - have text path
     books_to_analyse = db.query(Book).filter(
         Book.text_file_path.isnot(None),
         (Book.analysed == False) | (Book.analysed.is_(None))
@@ -843,6 +861,7 @@ def bulk_analyse_books(
     }
 
 def extract_gutenberg_id(text_file_path: str) -> int:
+# Extracts Gutenberg ID from text file path
     """Extract Gutenberg ID from text_file_path"""
     if "gutenberg_" in text_file_path:
         return int(text_file_path.replace("gutenberg_", ""))
@@ -854,6 +873,7 @@ def extract_gutenberg_id(text_file_path: str) -> int:
     raise ValueError(f"Cannot extract Gutenberg ID from: {text_file_path}")
 
 @router.get("/{book_id}/stylometric-profile")
+#Returns the stylometric profile for a book and ued for radar chart on BookshelfInfo
 def get_stylometric_profile(
     book_id: UUID,
     db: Session = Depends(get_db)
@@ -893,6 +913,7 @@ def get_stylometric_profile(
         )
 
 @router.get("/recommendations/{book_id}")
+#Return books stylometric similar using Euclidean distance across four features - pacing, tone, vocabulary richness and average sentence length
 def get_book_recommendations(
     book_id: UUID,
     limit: int = 10,
@@ -921,7 +942,7 @@ def get_book_recommendations(
         if not candidates:
             return {"source_book": {"book_id": source_book.book_id, "title": source_book.title, "author": source_book.author}, "recommendations": []}
 
-        #Score by euclidean distance across stylometric features
+        #Score by euclidean distance across stylometric features then converts to similarity score, where 1 is identical style
         scored = []
         for book, profile in candidates:
             try:
@@ -957,7 +978,7 @@ def get_book_recommendations(
                 "author": source_book.author
             },
             "recommendations": scored[:limit],
-            "cached": False
+            "cached": False #Caching handled by batch_process.py for user recommendations
         }
 
     except HTTPException:
@@ -967,6 +988,7 @@ def get_book_recommendations(
         raise HTTPException(status_code=500, detail=f"Failed to get recommendations: {str(e)}")
 
 @router.get("/{book_id}", response_model=BookResponse)
+#GET /books/{book_id}
 def get_book(book_id: UUID, db: Session = Depends(get_db)):
     book = db.query(Book).filter(Book.book_id == book_id).first()
     
@@ -979,6 +1001,7 @@ def get_book(book_id: UUID, db: Session = Depends(get_db)):
     return book
 
 @router.put("/{book_id}", response_model=BookResponse)
+#Updates mutable fields on a book record using a partial update pattern
 def update_book(book_id: UUID, book_update: BookUpdate, db: Session = Depends(get_db)):
     book = db.query(Book).filter(Book.book_id == book_id).first()
     
@@ -988,6 +1011,7 @@ def update_book(book_id: UUID, book_update: BookUpdate, db: Session = Depends(ge
             detail="Book not found"
         )
     
+    #Preventing unintended overwrites of existing data
     update_data = book_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(book, key, value)
@@ -998,6 +1022,7 @@ def update_book(book_id: UUID, book_update: BookUpdate, db: Session = Depends(ge
     return book
 
 @router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
+#This will permentaly delete a book from the catalouge
 def delete_book(book_id: UUID, db: Session = Depends(get_db)):
     book = db.query(Book).filter(Book.book_id == book_id).first()
     
@@ -1013,6 +1038,7 @@ def delete_book(book_id: UUID, db: Session = Depends(get_db)):
     return None
 
 @router.get("/", response_model=List[BookResponse])
+#This returns all books with optional filters for author and analysed status
 def get_books(
     skip: int = 0, 
     limit: int = 100,

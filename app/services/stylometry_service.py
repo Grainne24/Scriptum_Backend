@@ -9,6 +9,7 @@ from faststylometry.burrows_delta import calculate_burrows_delta
 from typing import Dict, List
 import re
 import math
+import nltk
 
 
 class StylometryAnalyser:
@@ -55,11 +56,11 @@ class StylometryAnalyser:
         results.sort(key=lambda x: x['delta'])
         print(f"Returning {len(results)} results")
         return results[:top_n]
-
+    
     def calculate_delta_between_two(self, book1: Dict, book2: Dict) -> Dict:
-        #Calculates Burrows' Delta between exactly two books.
-        #Returns delta score and similarity score.
-        train_corpus = self.build_corpus([book1])
+    #Calculates Burrows' Delta between exactly two books.
+    #Returns delta score and similarity score.
+        train_corpus = self.build_corpus([book1, book2])
         test_corpus = self.build_corpus([book2])
 
         delta_df = calculate_burrows_delta(train_corpus, test_corpus)
@@ -163,7 +164,11 @@ class StylometryAnalyser:
     def _split_sentences(self, text: str) -> list:
         try:
             from nltk.tokenize import sent_tokenize
-            sentences = sent_tokenize(text)
+            try:
+                sentences = sent_tokenize(text)
+            except LookupError:
+                nltk.download('punkt_tab', quiet=True)
+                sentences = sent_tokenize(text)
         except ImportError:
             text = re.sub(r'\bMrs\.', 'MrsXXX', text)
             text = re.sub(r'\bMr\.', 'MrXXX', text)

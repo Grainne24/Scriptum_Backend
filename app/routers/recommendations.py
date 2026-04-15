@@ -1,3 +1,7 @@
+'''
+    Recommendations router which handles all recommendation-related endpoints for Scriptum
+'''
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -12,11 +16,13 @@ from app.feedback_weights import calculate_feedback_adjustment, calculate_stylom
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
+#Cached recommendations will expire after 24 hours
 CACHE_TTL_HOURS = 24
 
-#ability to turn genre recommender on and off
+#Ability to turn genre recommender on and off
 ENABLE_GENRE_LAYER = True
 
+#Weighted blend of stylometric and genre
 STYLOMETRIC_WEIGHT = 0.8
 GENRE_WEIGHT = 0.2
 
@@ -77,6 +83,7 @@ def build_user_genre_profile(user_rated_books: list, db: Session) -> dict:
  
     return genre_counts
 
+#Returns cached recommendations for a user if they were generated within 24 hours
 def get_cached_recommendations(user_uuid: UUID, db: Session) -> Optional[list]:
     cutoff = datetime.utcnow() - timedelta(hours=CACHE_TTL_HOURS)
 
@@ -87,6 +94,7 @@ def get_cached_recommendations(user_uuid: UUID, db: Session) -> Optional[list]:
             Recommendation.user_id == user_uuid,
             Recommendation.generated_at >= cutoff
         )
+        #returned in ranked order
         .order_by(Recommendation.rank.asc())
         .all()
     )
@@ -102,7 +110,8 @@ def get_cached_recommendations(user_uuid: UUID, db: Session) -> Optional[list]:
             "summary": book.summary,
             "delta": rec.similarity_score or 0.0,
             "similarity": rec.similarity_score or 0.0,
-            "feedback_adjustment": 0.0,
+            "feedback_adjustment": 0.0, #Not stored in the cache so reset to 0
+            #These are also not cached
             "pacing_score": None,
             "tone_score": None,
             "vocabulary_richness": None,
@@ -110,7 +119,7 @@ def get_cached_recommendations(user_uuid: UUID, db: Session) -> Optional[list]:
         for rec, book in rows
     ]
 
-
+#Persists a fresh set of recommendations to recommendation table and clears any existing rows for users
 def save_recommendations(user_uuid: UUID, scored: list, db: Session):
     db.query(Recommendation).filter(Recommendation.user_id == user_uuid).delete()
 
@@ -129,12 +138,14 @@ def save_recommendations(user_uuid: UUID, scored: list, db: Session):
 
 
 def invalidate_cache(user_uuid: UUID, db: Session):
+#Deletes all cached recommendations for a user which will force a fresh recompute
 
     db.query(Recommendation).filter(Recommendation.user_id == user_uuid).delete()
     db.commit()
 
 
 def reorder_cache(user_uuid: UUID, book_id: UUID, adjustment: float, db: Session):
+#Applies a score adjustment to a single cahced recommendation and re ranks it in descending order
     row = db.query(Recommendation).filter(
         Recommendation.user_id == user_uuid,
         Recommendation.book_id == book_id
@@ -143,9 +154,11 @@ def reorder_cache(user_uuid: UUID, book_id: UUID, adjustment: float, db: Session
     if row is None:
         return
 
+    #Applies the adjustment and flush before re ranking so that the new score is visible
     row.similarity_score = round((row.similarity_score or 0.0) + adjustment, 4)
     db.flush()
 
+    #Re ranl all caches recommendatiosn for this used by an updated similarity score
     all_rows = (
         db.query(Recommendation)
         .filter(Recommendation.user_id == user_uuid)
@@ -159,6 +172,7 @@ def reorder_cache(user_uuid: UUID, book_id: UUID, adjustment: float, db: Session
     db.commit()
 
 @router.get("/for-user/{user_id}")
+#Gets a recommmendation for a user used by the Home activity feed
 def get_recommendations_for_user(
     user_id: str,
     limit: int = 10,
@@ -167,22 +181,26 @@ def get_recommendations_for_user(
     try:
         user_uuid = UUID(user_id)
 
+        #return cache results if fresh
         cached = get_cached_recommendations(user_uuid, db)
-        if cached is not None:
+        if cached is not None: #If a user has cached recs
             print(f"Returning {len(cached)} cached recs for user {user_id}")
             return cached[:limit]
 
         print(f"Computing fresh recommendations for user {user_id}")
 
+        #builds the users rated book profile
         rated_entries = db.query(UserBookshelf).filter(
             UserBookshelf.user_id == user_uuid,
             UserBookshelf.rating.isnot(None)
         ).all()
 
+        #Buils list of dicts pairing each rated entry's stylometric profile with users star rating
         user_rated_books = []
+        #Fetches all rated books in bookshelf 
         for entry in rated_entries:
             profile = db.query(StylometricProfile).filter(
-                StylometricProfile.book_id == entry.book_id
+                StylometricProfile.book_id == entry.book_id #fetches stylometric profile for book
             ).first()
             if profile:
                 user_rated_books.append({
@@ -190,12 +208,14 @@ def get_recommendations_for_user(
                     "rating": float(entry.rating)
                 })
 
+        #Exclude books from bookshelf 
         shelf_book_ids = set(
             entry.book_id for entry in db.query(UserBookshelf).filter(
                 UserBookshelf.user_id == user_uuid
             ).all()
         )
 
+        #fecthing candidate books
         candidates = db.query(Book, StylometricProfile).join(
             StylometricProfile, Book.book_id == StylometricProfile.book_id
         ).filter(
@@ -210,6 +230,9 @@ def get_recommendations_for_user(
 
         scored = []
 
+        user_genre_profile = build_user_genre_profile(user_rated_books, db)
+
+        #Score each candidate - calculcate base similarity score by averaging stylometric distance
         for book, profile in candidates:
             if user_rated_books:
                 base_score = sum(
@@ -219,9 +242,15 @@ def get_recommendations_for_user(
             else:
                 base_score = 0.5
 
+            #also applied feedback weight if mark intereseted/ not interested
             feedback_adj = calculate_feedback_adjustment(profile, user_rated_books)
             final_score = base_score + feedback_adj
 
+            if ENABLE_GENRE_LAYER:
+                candidate_genres = parse_genres(book.genres)
+                genre_score = calculate_genre_score(candidate_genres, user_genre_profile)
+                final_score = (STYLOMETRIC_WEIGHT * final_score) + (GENRE_WEIGHT * genre_score)
+            
             scored.append({
                 "book_id": str(book.book_id),
                 "title": book.title,
@@ -236,13 +265,16 @@ def get_recommendations_for_user(
                 "vocabulary_richness": float(profile.vocabulary_richness) if profile.vocabulary_richness else None,
             })
 
+        #Each book sorted and added to dictionary - from descending order
         scored.sort(key=lambda x: x["similarity"], reverse=True)
 
+        #Saved to cache and returned
         save_recommendations(user_uuid, scored, db)
         print(f"[CACHE SAVED] {len(scored)} recommendations saved for user {user_id}")
 
         return scored[:limit]
 
+    #Catches any exceptions
     except Exception as e:
         print(f"Error getting recommendations: {str(e)}")
         import traceback
@@ -254,6 +286,7 @@ def get_recommendations_for_user(
 
 
 @router.post("/interested/{user_id}/{book_id}")
+#Called when user taps interested in recommendations page
 def mark_interested(
     user_id: str,
     book_id: UUID,
@@ -268,6 +301,7 @@ def mark_interested(
 
 
 @router.post("/not-interested/{user_id}/{book_id}")
+#Called when user taps not interetsted in recommendations page
 def mark_not_interested(
     user_id: str,
     book_id: UUID,
@@ -278,6 +312,7 @@ def mark_not_interested(
 
         reorder_cache(user_uuid, book_id, adjustment=-0.5, db=db)
 
+        #Add and update a bookshelf entry so book filtered out future candidate books
         existing = db.query(UserBookshelf).filter(
             UserBookshelf.user_id == user_uuid,
             UserBookshelf.book_id == book_id
@@ -301,6 +336,7 @@ def mark_not_interested(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/refresh/{user_id}")
+#Force expired recommendation cache for user
 def refresh_recommendations(user_id: str, db: Session = Depends(get_db)):
     try:
         invalidate_cache(UUID(user_id), db)
@@ -309,6 +345,7 @@ def refresh_recommendations(user_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{book_id}", response_model=List[RecommendationResponse])
+#This is book to book recommendation endpoint using Burrows delta to test my algorithm against it 
 def get_recommendations(book_id: UUID, limit: int = 10, db: Session = Depends(get_db)):
 
     seed_book = db.query(Book).filter(Book.book_id == book_id).first()
@@ -317,6 +354,7 @@ def get_recommendations(book_id: UUID, limit: int = 10, db: Session = Depends(ge
     if not seed_book.text_source:
         raise HTTPException(status_code=400, detail="Seed book has no text available")
 
+    #Limit candidate pool to 500 to keep delta computation within render memory 
     candidates = db.query(Book).filter(
         Book.book_id != book_id,
         Book.analysed == True,
@@ -326,6 +364,7 @@ def get_recommendations(book_id: UUID, limit: int = 10, db: Session = Depends(ge
     if not candidates:
         raise HTTPException(status_code=404, detail="No candidate books found")
 
+    #Format seed + candidates for stylometry analyser
     seed = {
         "author": seed_book.author,
         "title": seed_book.title,
@@ -336,8 +375,10 @@ def get_recommendations(book_id: UUID, limit: int = 10, db: Session = Depends(ge
         for b in candidates
     ]
 
+    #Runs Burrows' Delta via fasstsylometry and retuen top results
     results = stylometry_analyser.get_recommendations(seed, candidate_list, top_n=limit)
 
+    #Maps results back to book objects
     title_to_book = {b.title: b for b in candidates}
     response = []
     for r in results:

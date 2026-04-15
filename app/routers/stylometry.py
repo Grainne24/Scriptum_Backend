@@ -187,6 +187,7 @@ def analyse_book_with_text(
         )
 
 @router.get("/profile/{book_id}")
+#This gets a stylometric profile from a book
 def get_stylometric_profile(book_id: UUID, db: Session = Depends(get_db)):
     
     profile = db.query(StylometricProfile).filter(

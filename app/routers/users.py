@@ -62,7 +62,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     print(f"Attempting to create user: {user.email}, {user.username}")
     
     try:
-        # Check if user already exists
+        #Checks if user already exists
         existing_user = db.query(User).filter(
             (User.email == user.email) | (User.username == user.username)
         ).first()
@@ -102,8 +102,8 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         )
 
 @router.get("/{user_id}", response_model=UserResponse)
+#Gets a user by their ID
 def get_user(user_id: UUID, db: Session = Depends(get_db)):
-    """Get user by ID"""
     user = db.query(User).filter(User.user_id == user_id).first()
     
     if not user:
@@ -115,8 +115,8 @@ def get_user(user_id: UUID, db: Session = Depends(get_db)):
     return user
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+#Deletes a user by their ID
 def delete_user(user_id: UUID, db: Session = Depends(get_db)):
-    """Delete user by ID"""
     user = db.query(User).filter(User.user_id == user_id).first()
     
     if not user:

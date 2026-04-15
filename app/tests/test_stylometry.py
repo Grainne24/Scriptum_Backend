@@ -132,3 +132,49 @@ class TestCalculateSimilarity:
         results = stylometry_analyser.get_recommendations(seed, candidates, top_n=2)
         for r in results:
             assert 0.0 <= r["similarity"] <= 1.0
+
+'''These are all tests for Burrows Delta directly via calculate_delta_between_two'''
+
+class TestRecommenderVsBurrowsDelta:
+
+    #Tests my personal recommender against burrows delta
+    def test_recommender_agrees_with_burrows_delta_ranking(self):
+        
+        #Use Burrows Delta to rank Hemingway vs Austen against seed
+        seed = {"author": "Hemingway", "title": "Seed", "text": HEMINGWAY_STYLE}
+        candidates = [
+            {"author": "Hemingway2", "title": "Similar", "text": HEMINGWAY_STYLE},
+            {"author": "Austen", "title": "Different", "text": AUSTEN_STYLE},
+        ]
+        burrows_results = stylometry_analyser.get_recommendations(seed, candidates, top_n=2)
+        burrows_top = burrows_results[0]["title"]
+
+        #Use feature vector distance (what the personalised recommender uses) to rank the same books
+        from app.feedback_weights import calculate_stylometric_distance
+        from unittest.mock import MagicMock
+
+        def make_profile(text):
+            result = stylometry_analyser.analyse_text(text)
+            profile = MagicMock()
+            profile.pacing_score = result["pacing_score"]
+            profile.tone_score = result["tone_score"]
+            profile.vocabulary_richness = result["vocabulary_richness"]
+            profile.avg_sentence_length = result["avg_sentence_length"]
+            profile.avg_word_length = result["avg_word_length"]
+            profile.lexical_diversity = result["lexical_diversity"]
+            return profile
+
+        seed_profile = make_profile(HEMINGWAY_STYLE)
+        similar_profile = make_profile(HEMINGWAY_STYLE)
+        different_profile = make_profile(AUSTEN_STYLE)
+
+        similar_score = calculate_stylometric_distance(seed_profile, similar_profile)
+        different_score = calculate_stylometric_distance(seed_profile, different_profile)
+
+        feature_top = "Similar" if similar_score > different_score else "Different"
+
+        #Both methods should agree on which book is more similar
+        assert burrows_top == feature_top, (
+            f"Burrows Delta ranked '{burrows_top}' first but "
+            f"feature vector ranked '{feature_top}' first"
+        )

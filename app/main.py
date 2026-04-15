@@ -12,7 +12,7 @@ from app.routers import batch_process
 #Createa database tables
 Base.metadata.create_all(bind=engine)
 
-#This initialize FastAPI app
+#This initialise FastAPI app
 app = FastAPI(
     title="Scriptum API",
     description="Book recommendation API based on writing style",
