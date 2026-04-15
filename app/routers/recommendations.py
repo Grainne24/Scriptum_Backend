@@ -294,9 +294,31 @@ def mark_interested(
 ):
     try:
         user_uuid = UUID(user_id)
-        reorder_cache(user_uuid, book_id, adjustment=+0.25, db=db)
+
+        #Remove from recommendation cache so it doesn't show again
+        db.query(Recommendation).filter(
+            Recommendation.user_id == user_uuid,
+            Recommendation.book_id == book_id
+        ).delete()
+
+        #Add to bookshelf as want_to_read so it's excluded from future recomputes
+        existing = db.query(UserBookshelf).filter(
+            UserBookshelf.user_id == user_uuid,
+            UserBookshelf.book_id == book_id
+        ).first()
+
+        if not existing:
+            entry = UserBookshelf(
+                user_id=user_uuid,
+                book_id=book_id,
+                book_status="want_to_read"
+            )
+            db.add(entry)
+
+        db.commit()
         return {"message": "Marked as interested"}
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 
