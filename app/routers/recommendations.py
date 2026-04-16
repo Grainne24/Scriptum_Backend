@@ -47,6 +47,7 @@ def parse_genres(genres_str: Optional[str]) -> set:
 
 #This compares the book genre to a users genre profile
 def calculate_genre_score(candidate_genres: set, user_genre_profile: dict) -> float:
+    #Returns values oin [0,0, 1,0] where 1.0 is a perfect genre match
     if not candidate_genres or not user_genre_profile:
         return 0.0
  
@@ -92,7 +93,7 @@ def get_cached_recommendations(user_uuid: UUID, db: Session) -> Optional[list]:
         .join(Book, Recommendation.book_id == Book.book_id)
         .filter(
             Recommendation.user_id == user_uuid,
-            Recommendation.generated_at >= cutoff
+            Recommendation.generated_at >= cutoff #Only rows newer than cutoff
         )
         #returned in ranked order
         .order_by(Recommendation.rank.asc())
@@ -158,7 +159,7 @@ def reorder_cache(user_uuid: UUID, book_id: UUID, adjustment: float, db: Session
     row.similarity_score = round((row.similarity_score or 0.0) + adjustment, 4)
     db.flush()
 
-    #Re ranl all caches recommendatiosn for this used by an updated similarity score
+    #Re ran all caches recommendations for this used by an updated similarity score
     all_rows = (
         db.query(Recommendation)
         .filter(Recommendation.user_id == user_uuid)
@@ -246,6 +247,7 @@ def get_recommendations_for_user(
             feedback_adj = calculate_feedback_adjustment(profile, user_rated_books)
             final_score = base_score + feedback_adj
 
+            #Enables the genre layer recommendation style
             if ENABLE_GENRE_LAYER:
                 candidate_genres = parse_genres(book.genres)
                 genre_score = calculate_genre_score(candidate_genres, user_genre_profile)
@@ -294,6 +296,8 @@ def mark_interested(
 ):
     try:
         user_uuid = UUID(user_id)
+
+        reorder_cache(user_uuid, book_id, adjustment=+0.25, db=db)
 
         #Remove from recommendation cache so it doesn't show again
         db.query(Recommendation).filter(
