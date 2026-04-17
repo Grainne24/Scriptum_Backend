@@ -20,6 +20,7 @@ def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
 @router.post("/login", response_model=UserResponse)
+#Thesis prompt: session management - returns the user record which the Android client persists in SharedPreferences; last_login updated here
 def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
 
     print(f"Login attempt for: {login_data.email}")

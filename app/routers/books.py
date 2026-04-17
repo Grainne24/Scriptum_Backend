@@ -25,8 +25,9 @@ router = APIRouter(prefix="/books", tags=["books"])
 
 @router.get("/user-bookshelf", response_model=List[BookResponse])
 #Returns all books saved to a users personal bookshelf
+#Thesis prompt: server-side pagination - limit applied at query level so only a page of rows is transferred to the client
 def get_my_bookshelf(
-    user_id: str, 
+    user_id: str,
     limit: int = 100,
     db: Session = Depends(get_db)
 ):
@@ -1039,8 +1040,9 @@ def delete_book(book_id: UUID, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=List[BookResponse])
 #This returns all books with optional filters for author and analysed status
+#Thesis prompt: offset-based server-side pagination (skip/limit) avoids loading the full catalogue client-side
 def get_books(
-    skip: int = 0, 
+    skip: int = 0,
     limit: int = 100,
     author: Optional[str] = None,
     analysed: Optional[bool] = None,

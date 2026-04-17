@@ -90,6 +90,7 @@ class TestStylometricDistanceBoundaries:
         )
 
 '''These are test cases for the calculate_feedback_adjustment function - Edge'''
+#Thesis prompt: edge-case test suite - tests None profiles, neutral ratings, opposing ratings, and large inputs to prevent silent failures
 
 def make_rated(rating, profile):
     return {"rating": rating, "profile": profile}

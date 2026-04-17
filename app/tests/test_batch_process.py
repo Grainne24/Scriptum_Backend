@@ -11,6 +11,7 @@ from app.routers.batch_process import (
 )
 
 '''This details the mock versions used for testing'''
+#Thesis prompt: edge-case test suite for the batch processor - covers None values, cache staleness, rollback on failure, and boundary batch sizes
 
 def make_mock_user(user_id=None):
     user = MagicMock()

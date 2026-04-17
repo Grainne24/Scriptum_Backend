@@ -41,7 +41,9 @@ _batch_status = {
     "last_run_duration_seconds": 0,
 }
 
-#This portion mimics recommendations.py 
+#This portion mimics recommendations.py
+#Thesis prompt: feature vector distance pipeline - scores candidates using weighted Euclidean distance, not Burrows' Delta, to keep real-time scoring fast
+#Thesis prompt: batch processor scoring function - scores every candidate book for a user and returns the top 50 results
 def _score_candidates_for_user(user_uuid: UUID, db: Session) -> list:
 #Scores every eligible book for single user and stores up to 50 recommendations sorted by descending final score
     #Fetch all user's bookshelf entried
@@ -97,6 +99,7 @@ def _score_candidates_for_user(user_uuid: UUID, db: Session) -> list:
             })
  
     #This scores the books
+    #Thesis prompt iv: stylometric profile builder — averages feature vectors across rated books to form the user's style preference
     scored = []
     for book, profile in candidates:
         if user_rated_books:
@@ -136,6 +139,7 @@ def _score_candidates_for_user(user_uuid: UUID, db: Session) -> list:
 
 def _batch_save_recommendations(user_uuid: UUID, scored: list, db: Session):
 #This replaces the users cached recommendations in the recommendation table with new recommendations
+#Thesis prompt: batch processor save function - persists the cached scored results to the recommendations table
     #Delete cache
     db.query(Recommendation).filter(
         Recommendation.user_id == user_uuid
@@ -158,6 +162,7 @@ def _batch_save_recommendations(user_uuid: UUID, scored: list, db: Session):
 def _is_cache_fresh(user_uuid: UUID, db: Session) -> bool:
 #If a user has a fresh cache meaning that reommendations are less than 24 hours then it will avoid recomputing
 #Used by run_batch to skip users
+#Thesis prompt: batch processor cache check - returns True if recommendations were generated within the 24-hour TTL
     cutoff = datetime.utcnow() - timedelta(hours=CACHE_TTL_HOURS)
     newest = (
         db.query(Recommendation.generated_at)
@@ -170,6 +175,7 @@ def _is_cache_fresh(user_uuid: UUID, db: Session) -> bool:
     return newest is not None #True = fresh cache exists, False = needs recompute
 
 #This batch process will run in the background
+#Thesis prompt: batch processor background task - loops over users, checks cache freshness, scores candidates, and saves results
 def _run_batch(batch_size: int, force_refresh: bool):
 #This is a background function triggered by POST /recommendations/batch-process
 #Creates own DB session (SessionLocal) as it runs in thread outside FastAPIs request/response lifecycle
@@ -299,6 +305,7 @@ async def get_batch_status():
 def calculate_genre_boost(candidate_book: Book, user_rated_books: list, db: Session) -> float:
 #Returns a genre boost for candidate book - if book has rated 4 and higher, checks how many genres shares with candidate
 #Adds boost of 0.1 to book and capped at 0.3 - maximum boost
+#Thesis prompt: genre boost layer - calculate_genre_boost() adds up to 0.3 to candidates sharing genres with the user's liked books
 
     #No genres saved for book
     if not candidate_book.genres:

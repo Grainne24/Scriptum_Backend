@@ -174,6 +174,7 @@ def reorder_cache(user_uuid: UUID, book_id: UUID, adjustment: float, db: Session
 
 @router.get("/for-user/{user_id}")
 #Gets a recommmendation for a user used by the Home activity feed
+#Thesis prompt: uses feature vector distance (weighted Euclidean via calculate_stylometric_distance) rather than Burrows' Delta for real-time scoring
 def get_recommendations_for_user(
     user_id: str,
     limit: int = 10,
@@ -234,6 +235,7 @@ def get_recommendations_for_user(
         user_genre_profile = build_user_genre_profile(user_rated_books, db)
 
         #Score each candidate - calculcate base similarity score by averaging stylometric distance
+        #Thesis prompt: stylometric profile builder - base_score averages feature-vector distances across all of the user's highly-rated books
         for book, profile in candidates:
             if user_rated_books:
                 base_score = sum(
@@ -248,6 +250,7 @@ def get_recommendations_for_user(
             final_score = base_score + feedback_adj
 
             #Enables the genre layer recommendation style
+            #Thesis prompt: genre boost layer — blends stylometric score (0.8) with genre match score (0.2) on top of base similarity
             if ENABLE_GENRE_LAYER:
                 candidate_genres = parse_genres(book.genres)
                 genre_score = calculate_genre_score(candidate_genres, user_genre_profile)
