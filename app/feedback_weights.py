@@ -52,7 +52,7 @@ def calculate_stylometric_distance(profile_a, profile_b) -> float:
         if val_a is None or val_b is None:
             continue
 
-        #Clamp at 0.0 so values further apart than the scale don't go negative.
+        #Clamp at 0.0 so values further apart than the scale don't go negative
         diff = abs(float(val_a) - float(val_b)) / scale
         similarity = max(0.0, 1.0 - diff)
         total_similarity += similarity
@@ -63,7 +63,7 @@ def calculate_stylometric_distance(profile_a, profile_b) -> float:
 
 
 def calculate_feedback_adjustment(candidate_profile,user_rated_books: list) -> float:
-#This computes a feedback adjustment score for a candidate book based on how stylistically similar it is to books the user has already rated.
+#This computes a feedback adjustment score for a candidate book based on how stylistically similar it is to books the user has already rated
     if not user_rated_books:
         return 0.0
 
