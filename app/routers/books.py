@@ -38,7 +38,8 @@ def get_my_bookshelf(
         books = db.query(Book, UserBookshelf).join(
             UserBookshelf, Book.book_id == UserBookshelf.book_id
         ).filter(
-            UserBookshelf.user_id == user_uuid
+            UserBookshelf.user_id == user_uuid,
+            UserBookshelf.book_status != "not_interested"
         ).limit(limit).all()
         
         result = []
